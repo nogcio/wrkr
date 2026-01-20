@@ -91,6 +91,9 @@ jobs:
         with:
           # Needed when workflow permissions are locked down; checkout token is also used for git push.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+          # Checkout a real branch so we can commit + push the formula update.
+          ref: main
+          fetch-depth: 0
 
       - name: Compute macOS SHAs and update formula
         id: update_formula
