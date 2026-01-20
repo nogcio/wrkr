@@ -40,7 +40,7 @@ jobs:
           - platform: linux/amd64
             runner: ubuntu-latest
           - platform: linux/arm64
-            runner: macos-15
+            runner: ubuntu-latest
 
     steps:
       - name: Checkout repository
