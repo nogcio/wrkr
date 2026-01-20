@@ -185,4 +185,4 @@ See [`.github/SECURITY.md`](.github/SECURITY.md).
 
 ## License
 
-MIT (see [`LICENSE`](LICENSE)).
+GNU Affero General Public License v3.0 (see [`LICENSE`](LICENSE)).

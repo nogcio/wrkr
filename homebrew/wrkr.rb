@@ -2,7 +2,7 @@ class Wrkr < Formula
   desc "Fast, scriptable load testing tool"
   homepage "https://github.com/nogcio/wrkr"
   version "__VERSION__"
-  license "MIT"
+  license "AGPL-3.0-only"
 
   on_macos do
     on_arm do

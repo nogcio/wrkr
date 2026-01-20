@@ -2,6 +2,11 @@ name: Dependency Review
 
 on:
   pull_request:
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
 
 permissions:
   contents: read

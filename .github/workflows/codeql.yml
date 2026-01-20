@@ -3,8 +3,36 @@ name: CodeQL
 on:
   push:
     branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "rust-toolchain.toml"
+      - "Dockerfile"
+      - "Makefile"
+      - ".github/workflows/**"
+      - "wrkr/**"
+      - "wrkr-core/**"
+      - "wrkr-lua/**"
+      - "wrkr-testserver/**"
+      - "wrkr-value/**"
   pull_request:
     branches: [main]
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "rust-toolchain.toml"
+      - "Dockerfile"
+      - "Makefile"
+      - ".github/workflows/**"
+      - "wrkr/**"
+      - "wrkr-core/**"
+      - "wrkr-lua/**"
+      - "wrkr-testserver/**"
+      - "wrkr-value/**"
   schedule:
     - cron: "37 3 * * 1" # weekly
   workflow_dispatch: {}

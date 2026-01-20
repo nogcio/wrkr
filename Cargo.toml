@@ -17,7 +17,7 @@ protoc-bin-vendored = "3.2.0"
 version = "0.0.1"
 edition = "2024"
 authors = ["Andrew Sumskoy <getansum@nogc.io>"]
-license = "MIT"
+license = "AGPL-3.0-only"
 homepage = "https://wrkr.nogc.io"
 repository = "https://github.com/nogcio/wrkr"
 

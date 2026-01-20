@@ -4,6 +4,20 @@ on:
   push:
     branches:
       - "**"
+    paths:
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "**/Cargo.toml"
+      - "**/Cargo.lock"
+      - "rust-toolchain.toml"
+      - "Dockerfile"
+      - "Makefile"
+      - ".github/workflows/**"
+      - "wrkr/**"
+      - "wrkr-core/**"
+      - "wrkr-lua/**"
+      - "wrkr-testserver/**"
+      - "wrkr-value/**"
   pull_request: {}
   workflow_dispatch: {}
 
