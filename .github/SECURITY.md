@@ -2,7 +2,9 @@
 
 If you discovered a security vulnerability, please report it privately so we can fix it before public disclosure.
 
-Contact: open a private issue and label it `security`, or email a maintainer (see contact in `Cargo.toml` / `package.json`).
+Preferred contact: use GitHub Security Advisories (private vulnerability report) for this repository.
+
+Alternative contact: email the maintainer at getansum@nogc.io.
 
 Include:
 - Short description of the vulnerability

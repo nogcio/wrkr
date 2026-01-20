@@ -7,12 +7,15 @@ Briefly describe the changes in this PR and why they are needed.
 - New feature
 - Refactor
 - Documentation
+- CI/build
+- Performance
 
 ## How to test
 Describe steps to locally verify (commands, environment).
 
 ## Checklist
-- [ ] Code formatted (`cargo fmt`, `npm run format`)
-- [ ] Linters pass (`cargo clippy`, `npm run lint`)
-- [ ] Tests added/updated (if applicable)
-- [ ] Documentation/README updated (if needed)
+- [ ] Formatting OK (`cargo fmt --all`)
+- [ ] Clippy clean (`cargo clippy --all-targets -- -D warnings`)
+- [ ] Tests pass (`cargo test --workspace`)
+- [ ] User-facing docs updated (README / `wrkr-lua/README.md` / mdBook under `docs/`)
+- [ ] Lua runtime + LuaLS stubs kept in sync (if touching `wrkr-lua` modules)
