@@ -2,6 +2,8 @@ use std::sync::Arc;
 
 use mlua::{Lua, Value};
 
+use crate::value_util::{Int64Repr, lua_to_value, value_to_lua};
+
 pub(super) fn register_runtime(
     lua: &Lua,
     shared: Arc<wrkr_core::runner::SharedStore>,
@@ -17,14 +19,14 @@ pub(super) fn register_runtime(
                     let Some(value) = shared.get(&key) else {
                         return Ok(Value::Nil);
                     };
-                    crate::json_util::from_shared_value(lua, &value).map_err(mlua::Error::external)
+                    value_to_lua(lua, &value, Int64Repr::Integer).map_err(mlua::Error::external)
                 })?
             };
 
             let set = {
                 let shared = shared.clone();
                 lua.create_function(move |lua, (key, value): (String, Value)| {
-                    let value = crate::json_util::to_shared_value(lua, value)
+                    let value = lua_to_value(lua, value, Int64Repr::Integer)
                         .map_err(mlua::Error::external)?;
                     shared.set(&key, value);
                     Ok(())
@@ -61,7 +63,7 @@ pub(super) fn register_runtime(
                         let Some(value) = shared.get(&key) else {
                             return Ok(Value::Nil);
                         };
-                        crate::json_util::from_shared_value(&lua, &value)
+                        value_to_lua(&lua, &value, Int64Repr::Integer)
                             .map_err(mlua::Error::external)
                     }
                 })?

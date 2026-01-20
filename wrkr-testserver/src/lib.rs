@@ -18,6 +18,9 @@ pub const PATH_ECHO: &str = "/echo";
 pub const PATH_SLOW: &str = "/slow";
 pub const PATH_QP: &str = "/qp";
 
+pub mod grpc;
+pub use grpc::GrpcTestServer;
+
 #[derive(Debug, Clone, Default)]
 pub struct TestServerStats {
     requests_total: Arc<AtomicU64>,

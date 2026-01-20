@@ -14,9 +14,23 @@
 - **Modularity is non-negotiable**: different entities belong in different files/modules; when introducing a new “thing” (type/module/API), create a dedicated file/module for it rather than appending it to an unrelated one.
 - **Idiomatic Rust & best practices**: keep the project idiomatic and follow Rust best practices (standard tooling like `cargo fmt`/`clippy`, clear ownership/lifetimes, avoid `unsafe` unless justified, and prefer conventional crate/module organization).
 
+- **Rust module layout (single style)**: use `foo.rs` for modules. If a module has submodules, keep the parent as `foo.rs` and place children in `foo/*.rs`. Do not use `foo/mod.rs` anywhere in this repo.
+
+- **Cross-language data contract**: if arbitrary values must cross the boundary between a scripting language (Lua/JS/etc) and `wrkr-core`, use `wrkr-value` (`wrkr_value::Value`/`MapKey`). Do not pass `prost_reflect` types, `serde_json::Value`, or ad-hoc strings as the interop format.
+
+- **Use enums for fixed sets**: if a value is conceptually a fixed/closed enumeration (e.g. request kind, protocol mode, known status bucket), represent it as a Rust `enum` (with a stable string mapping when needed for tags/metrics) rather than passing ad-hoc strings.
+
+- **Enum string conversions must be centralized**: if an enum needs to be parsed from a string and/or rendered as a stable string (CLI, config, tags/metrics), define that mapping on the enum itself using derive macros (prefer `strum` with `EnumString`/`Display` and explicit `#[strum(serialize = "...")]` aliases). Do not scatter `match`/`if` chains converting enums to/from strings across the project.
+
 - **Lua runner API rules**:
 	- **No globals**: do not expose `http`, `check`, `__ENV`, `open`, etc. as Lua globals.
 	- **Modules only**: expose all Lua APIs via `require("wrkr/... ")` style modules (e.g. `wrkr/http`, `wrkr/check`, `wrkr/env`, `wrkr/fs`).
+
+- **Lua + LuaLS stubs must be warning-free**:
+	- When editing or adding files under `wrkr-lua/lua-stubs/`, ensure LuaLS (sumneko) produces no diagnostics.
+	- Avoid conflicting declarations (e.g. don’t define `M.Client` as both a function and a table; model submodules as separate `*Module` tables when needed).
+	- If a stub has `---@return`, provide a dummy return value of the correct type to avoid `missing-return` warnings.
+	- Keep signatures aligned with runtime behavior (e.g. `wrkr/check` accepts any value, not only HTTP responses).
 
 - **Lua integration (how it works in this repo)**:
 	- **Where the Lua integration lives**:

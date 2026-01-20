@@ -64,6 +64,7 @@ pub enum Error {
 mod debugger;
 mod editor_stubs;
 mod group_api;
+mod grpc_api;
 mod http_api;
 mod json_util;
 mod lifecycle;
@@ -71,6 +72,7 @@ mod loader;
 mod metrics_api;
 mod modules;
 mod options;
+mod value_util;
 mod vu;
 
 pub use editor_stubs::{StubFile, luals_stub_files};

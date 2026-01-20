@@ -10,10 +10,12 @@ mod debug;
 mod env;
 mod fs;
 mod group;
+mod grpc;
 mod http;
 mod json;
 mod metrics;
 mod shared;
+mod uuid;
 mod vu;
 mod wrkr;
 
@@ -34,12 +36,14 @@ pub fn register(
     shared: Arc<wrkr_core::runner::SharedStore>,
 ) -> Result<()> {
     http::register_runtime(lua, client.clone(), stats.clone())?;
+    grpc::register_runtime(lua, script_path, stats.clone())?;
     check::register_runtime(lua, stats.clone())?;
     metrics::register_runtime(lua, stats.clone())?;
     env::register_runtime(lua, env_vars)?;
     fs::register(lua, script_path)?;
     debug::register(lua)?;
     json::register(lua)?;
+    uuid::register(lua)?;
     vu::register(lua, vu_id)?;
     group::register(lua)?;
     shared::register_runtime(lua, shared)?;

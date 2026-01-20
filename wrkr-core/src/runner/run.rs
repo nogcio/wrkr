@@ -6,7 +6,9 @@ use std::time::Instant;
 
 use crate::HttpClient;
 
-use super::config::{RunConfig, ScenarioConfig, ScenarioExecutor, ScriptOptions};
+use super::config::{
+    RunConfig, ScenarioConfig, ScenarioExecutor, ScenarioExecutorKind, ScriptOptions,
+};
 use super::error::{Error, Result};
 use super::gate::IterationGate;
 use super::pacer::ArrivalPacer;
@@ -27,16 +29,13 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
         for s in opts.scenarios {
             let exec = s.exec.unwrap_or_else(|| "Default".to_string());
             let executor_name = s.executor.as_deref().unwrap_or("constant-vus");
+            let executor_kind: ScenarioExecutorKind =
+                executor_name.parse().map_err(|_| Error::InvalidExecutor)?;
 
             // CLI flags have the highest priority. If the script defines a ramping executor but the
             // user explicitly requested a different run shape via CLI (iterations/vus/duration),
             // treat it as a constant VU scenario and ignore ramping-specific fields.
-            if cli_overrides_set
-                && matches!(
-                    executor_name,
-                    "ramping-vus" | "ramping-arrival-rate" | "ramping-rps"
-                )
-            {
+            if cli_overrides_set && executor_kind.is_ramping() {
                 let vus = cfg.vus.or(s.vus).or(opts.vus).unwrap_or(1);
                 if vus == 0 {
                     return Err(Error::InvalidVus);
@@ -59,8 +58,8 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                 continue;
             }
 
-            match executor_name {
-                "constant-vus" | "constant" | "per-vu-iterations" => {
+            match executor_kind {
+                ScenarioExecutorKind::ConstantVus => {
                     let vus = cfg.vus.or(s.vus).or(opts.vus).unwrap_or(1);
                     if vus == 0 {
                         return Err(Error::InvalidVus);
@@ -81,7 +80,7 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                         duration,
                     });
                 }
-                "ramping-vus" => {
+                ScenarioExecutorKind::RampingVus => {
                     if s.iterations.is_some() || opts.iterations.is_some() {
                         return Err(Error::InvalidIterations);
                     }
@@ -115,7 +114,7 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                         duration: Some(total_duration),
                     });
                 }
-                "ramping-arrival-rate" | "ramping-rps" => {
+                ScenarioExecutorKind::RampingArrivalRate => {
                     if s.iterations.is_some() || opts.iterations.is_some() {
                         return Err(Error::InvalidIterations);
                     }
@@ -161,7 +160,6 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                         duration: Some(total_duration),
                     });
                 }
-                _ => return Err(Error::InvalidExecutor),
             }
         }
         return Ok(out);
@@ -428,7 +426,8 @@ where
 
             let mut tick_id: u64 = 0;
             let mut last_at = Instant::now();
-            let mut last_requests_total = stats.requests_total();
+            let mut last_http_requests_total = stats.http_requests_total();
+            let mut last_grpc_requests_total = stats.grpc_requests_total();
             let mut last_bytes_received_total = stats.bytes_received_total();
             let mut last_bytes_sent_total = stats.bytes_sent_total();
 
@@ -442,10 +441,17 @@ where
 
                 let elapsed = started.elapsed();
 
-                let requests_total = stats.requests_total();
-                let delta_req = requests_total.saturating_sub(last_requests_total);
-                last_requests_total = requests_total;
-                let rps_now = (delta_req as f64) / dt.as_secs_f64().max(1e-9);
+                let http_requests_total = stats.http_requests_total();
+                let delta_http_req = http_requests_total.saturating_sub(last_http_requests_total);
+                last_http_requests_total = http_requests_total;
+                let http_rps_now = (delta_http_req as f64) / dt.as_secs_f64().max(1e-9);
+
+                let grpc_requests_total = stats.grpc_requests_total();
+                let delta_grpc_req = grpc_requests_total.saturating_sub(last_grpc_requests_total);
+                last_grpc_requests_total = grpc_requests_total;
+                let grpc_rps_now = (delta_grpc_req as f64) / dt.as_secs_f64().max(1e-9);
+
+                let rps_now = http_rps_now + grpc_rps_now;
                 stats.record_rps_sample(rps_now);
 
                 let bytes_received_total = stats.bytes_received_total();
@@ -470,6 +476,7 @@ where
 
                 let iterations_total = stats.iterations_total();
                 let failed_requests_total = stats.failed_requests_total();
+                let requests_total = stats.requests_total();
 
                 let latency_stdev_pct = if latency.mean_ms > 0.0 {
                     (latency.stdev_ms / latency.mean_ms) * 100.0

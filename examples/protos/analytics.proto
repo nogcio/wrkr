@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+message OrderItem {
+  int32 quantity = 1;
+  string category = 2;
+  int64 price_cents = 3;
+}
+
+enum OrderStatus {
+  UNKNOWN = 0;
+  COMPLETED = 1;
+  PENDING = 2;
+  FAILED = 3;
+}
+
+message Order {
+  string id = 1;
+  OrderStatus status = 2;
+  string country = 3;
+  repeated OrderItem items = 4;
+}
+
+message AnalyticsRequest {
+  repeated Order orders = 1;
+}
+
+message AggregateResult {
+  int32 processed_orders = 1;
+  map<string, int64> amount_by_country = 2;
+  map<string, int32> quantity_by_category = 3;
+  string echoed_client_id = 4;
+}
+
+service AnalyticsService {
+  rpc AggregateOrders (AnalyticsRequest) returns (AggregateResult);
+}

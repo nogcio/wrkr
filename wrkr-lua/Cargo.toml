@@ -28,8 +28,10 @@ tokio = { version = "1", features = [
     "net",
     "time",
 ] }
+uuid = { version = "1", features = ["v4"] }
 url = "2"
 wrkr-core = { path = "../wrkr-core" }
+wrkr-value = { path = "../wrkr-value" }
 
 [dev-dependencies]
 wrkr-testserver = { path = "../wrkr-testserver" }

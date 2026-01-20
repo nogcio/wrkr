@@ -7,19 +7,6 @@ use crate::group_api;
 use crate::json_util;
 use crate::{Error, Result};
 
-fn http_error_kind(err: &wrkr_core::Error) -> &'static str {
-    match err {
-        wrkr_core::Error::InvalidUrl(_) => "invalid_url",
-        wrkr_core::Error::OnlyHttpSupported(_) => "only_http_supported",
-        wrkr_core::Error::RequestBuild(_) => "request_build",
-        wrkr_core::Error::HeaderName(_) => "header_name",
-        wrkr_core::Error::HeaderValue(_) => "header_value",
-        wrkr_core::Error::Request(_) => "request",
-        wrkr_core::Error::Timeout(_) => "timeout",
-        wrkr_core::Error::BodyRead(_) => "body_read",
-    }
-}
-
 #[derive(Debug, Default)]
 struct HttpRequestOptions {
     headers: Vec<(String, String)>,
@@ -87,7 +74,7 @@ pub fn create_http_module(
                         Ok(t)
                     }
                     Err(err) => {
-                        let err_kind = http_error_kind(&err);
+                        let err_kind = err.transport_error_kind();
                         stats.record_http_request(
                             wrkr_core::runner::HttpRequestMeta {
                                 method: "GET",
@@ -188,7 +175,7 @@ pub fn create_http_module(
                             Ok(t)
                         }
                         Err(err) => {
-                            let err_kind = http_error_kind(&err);
+                            let err_kind = err.transport_error_kind();
                             stats.record_http_request(
                                 wrkr_core::runner::HttpRequestMeta {
                                     method: "POST",

@@ -1,0 +1,66 @@
+---@meta
+
+---@class wrkr.grpc
+local M = {}
+
+---@class wrkr.grpc.ClientModule
+local ClientModule = {}
+
+---@class wrkr.grpc.TlsOptions
+---@field ca string? PEM bytes
+---@field cert string? PEM bytes
+---@field key string? PEM bytes
+---@field server_name string? SNI / domain name
+---@field insecure_skip_verify boolean?
+
+---@class wrkr.grpc.ConnectOptions
+---@field timeout string? e.g. "3s"
+---@field tls wrkr.grpc.TlsOptions?
+
+---@class wrkr.grpc.InvokeOptions
+---@field timeout string? e.g. "1s"
+---@field metadata table<string, string|string[]>?
+---@field tags table<string, string|number|boolean>?
+---@field name string?
+
+---@class wrkr.grpc.UnaryResponse
+---@field ok boolean
+---@field status integer? gRPC status code (0..16). nil for transport error.
+---@field message string?
+---@field error string?
+---@field error_kind string?
+---@field headers table<string, string>?
+---@field trailers table<string, string>?
+---@field response table?
+
+---@class wrkr.grpc.Client
+local Client = {}
+
+---@return wrkr.grpc.Client
+function ClientModule.new() end
+
+---@param paths string[]
+---@param file string
+---@return boolean|nil, string? err
+function Client:load(paths, file)
+	return true
+end
+
+---@param target string
+---@param opts wrkr.grpc.ConnectOptions?
+---@return boolean|nil, string? err
+function Client:connect(target, opts)
+	return true
+end
+
+---@param full_method string @"pkg.Service/Method"
+---@param req any
+---@param opts wrkr.grpc.InvokeOptions?
+---@return wrkr.grpc.UnaryResponse
+function Client:invoke(full_method, req, opts)
+	return { ok = true, status = 0, response = {}, headers = {}, trailers = {} }
+end
+
+M.Client = ClientModule
+
+return M

@@ -1,6 +1,17 @@
 [workspace]
 resolver = "3"
-members = ["wrkr", "wrkr-core", "wrkr-lua", "wrkr-testserver"]
+members = ["wrkr", "wrkr-core", "wrkr-lua", "wrkr-testserver", "wrkr-value"]
+
+[workspace.dependencies]
+strum = { version = "0.27", features = ["derive"] }
+prost = "0.14.3"
+prost-types = "0.14.3"
+prost-reflect = "0.16.3"
+tonic = "0.14.2"
+tonic-build = "0.14.2"
+tonic-prost-build = "0.14.2"
+tonic-prost = "0.14.2"
+protoc-bin-vendored = "3.2.0"
 
 [workspace.package]
 version = "0.0.1"

@@ -31,6 +31,10 @@ pub fn luals_stub_files() -> &'static [StubFile] {
             contents: include_str!("../lua-stubs/wrkr/group.lua"),
         },
         StubFile {
+            path: "wrkr/grpc.lua",
+            contents: include_str!("../lua-stubs/wrkr/grpc.lua"),
+        },
+        StubFile {
             path: "wrkr/http.lua",
             contents: include_str!("../lua-stubs/wrkr/http.lua"),
         },
@@ -49,6 +53,10 @@ pub fn luals_stub_files() -> &'static [StubFile] {
         StubFile {
             path: "wrkr/shared.lua",
             contents: include_str!("../lua-stubs/wrkr/shared.lua"),
+        },
+        StubFile {
+            path: "wrkr/uuid.lua",
+            contents: include_str!("../lua-stubs/wrkr/uuid.lua"),
         },
         StubFile {
             path: "wrkr/vu.lua",

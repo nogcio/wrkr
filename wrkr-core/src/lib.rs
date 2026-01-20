@@ -1,5 +1,15 @@
+mod grpc;
 mod http;
+mod proto;
 
 pub mod runner;
 
-pub use http::{Error, HttpClient, HttpRequest, HttpResponse, Result, estimate_http_request_bytes};
+pub use grpc::{
+    ConnectOptions as GrpcConnectOptions, Error as GrpcError, GrpcClient, GrpcTransportErrorKind,
+    InvokeOptions as GrpcInvokeOptions, TlsConfig as GrpcTlsConfig, UnaryResult as GrpcUnaryResult,
+};
+pub use http::{
+    Error, HttpClient, HttpRequest, HttpResponse, HttpTransportErrorKind, Result,
+    estimate_http_request_bytes,
+};
+pub use proto::{Error as ProtoError, GrpcMethod, ProtoSchema};

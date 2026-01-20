@@ -1,9 +1,10 @@
 ---@meta
 
----Run checks against a response.
----@param res wrkr.HttpResponse
----@param checks table<string, fun(res: wrkr.HttpResponse): boolean>
+---Run checks against any value.
+---@generic T
+---@param value T
+---@param checks table<string, fun(value: T): boolean>
 ---@return boolean ok
-return function(res, checks)
+return function(value, checks)
   return true
 end

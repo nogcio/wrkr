@@ -35,6 +35,30 @@ pub enum ScenarioExecutor {
     },
 }
 
+/// Scenario executor kind (the string form used by scripts/CLI).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::EnumString, strum::Display)]
+pub enum ScenarioExecutorKind {
+    #[strum(
+        serialize = "constant-vus",
+        serialize = "constant",
+        serialize = "per-vu-iterations"
+    )]
+    ConstantVus,
+
+    #[strum(serialize = "ramping-vus")]
+    RampingVus,
+
+    #[strum(serialize = "ramping-arrival-rate", serialize = "ramping-rps")]
+    RampingArrivalRate,
+}
+
+impl ScenarioExecutorKind {
+    #[must_use]
+    pub fn is_ramping(self) -> bool {
+        matches!(self, Self::RampingVus | Self::RampingArrivalRate)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ScenarioConfig {
     pub name: String,

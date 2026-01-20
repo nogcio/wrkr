@@ -247,6 +247,22 @@ async fn lua_script_can_require_wrkr_style_modules() {
 }
 
 #[tokio::test]
+async fn uuid_module_generates_v4() {
+    let server = TestServer::start()
+        .await
+        .unwrap_or_else(|err| panic!("start test server failed: {err}"));
+    let base_url = server.base_url().to_string();
+    let (script_path, script) = read_test_script("uuid.lua");
+
+    let summary = run_with_base_url(&script_path, &script, &base_url).await;
+
+    assert_eq!(summary.checks_total, 2);
+    assert_eq!(summary.checks_failed, 0);
+
+    server.shutdown().await;
+}
+
+#[tokio::test]
 async fn shared_store_module_end_to_end() {
     let server = TestServer::start()
         .await

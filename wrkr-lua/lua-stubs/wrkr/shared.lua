@@ -6,7 +6,9 @@ local M = {}
 ---Get a value from the shared store.
 ---@param key string
 ---@return any|nil
-function M.get(key) end
+function M.get(key)
+	return nil
+end
 
 ---Set a value in the shared store (JSON-encoded).
 ---@param key string
@@ -21,23 +23,31 @@ function M.delete(key) end
 ---@param key string
 ---@param delta? integer
 ---@return integer
-function M.incr(key, delta) end
+function M.incr(key, delta)
+	return 0
+end
 
 ---Get a shared counter value (0 if missing).
 ---@param key string
 ---@return integer
-function M.counter(key) end
+function M.counter(key)
+	return 0
+end
 
 ---Wait until a key exists, then return its value.
 ---@async
 ---@param key string
 ---@return any
-function M.wait(key) end
+function M.wait(key)
+	return nil
+end
 
 ---Wait on a named barrier.
 ---@async
 ---@param name string
 ---@param parties integer
-function M.barrier(name, parties) end
+function M.barrier(name, parties)
+	return nil
+end
 
 return M

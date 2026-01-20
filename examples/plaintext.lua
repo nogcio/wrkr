@@ -2,11 +2,11 @@ options = { vus = 100, duration = "10s" }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")
-local ex = require("lib.example")
+local env = require("wrkr/env")
 local checks = require("lib.checks")
 
 function Default()
-  local base = ex.base_url()
+  local base = env.BASE_URL
 
   local res = http.get(base .. "/plaintext")
   check(res, {

@@ -123,6 +123,7 @@ Examples:
 ```bash
 wrkr run examples/plaintext.lua --vus 50 --duration 30s
 wrkr run examples/json_aggregate.lua --iterations 1000 --output json
+wrkr run examples/grpc_aggregate.lua --env GRPC_TARGET=http://127.0.0.1:50051
 wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 ```
 
@@ -151,6 +152,7 @@ See [`examples/`](examples/) for ready-to-run scripts:
 
 - `examples/plaintext.lua` (basic GET + checks)
 - `examples/json_aggregate.lua` (JSON + aggregation)
+- `examples/grpc_aggregate.lua` (gRPC + aggregation)
 - `examples/lifecycle.lua` (Setup/Teardown/HandleSummary hooks)
 - `examples/ramping_vus.lua`
 - `examples/ramping_arrival_rate.lua`

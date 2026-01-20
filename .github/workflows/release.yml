@@ -48,7 +48,10 @@ jobs:
           tar: unix
           zip: windows
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # If repository/org policy forces GITHUB_TOKEN to be read-only, use a PAT.
+          # Create a fine-grained PAT with "Contents: Read and write" for this repo and add it
+          # as Actions secret RELEASE_TOKEN.
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   update-homebrew-formula:
     name: Update Homebrew formula
@@ -61,11 +64,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Needed when workflow permissions are locked down; checkout token is also used for git push.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Compute macOS SHAs and update formula
         id: update_formula
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail

@@ -31,8 +31,30 @@ pub struct HttpRequestMeta<'a> {
     pub name: &'a str,
     pub status: Option<u16>,
     /// If set, the request failed due to a transport error.
-    /// The string must be a stable, low-cardinality error kind (used for grouping).
-    pub transport_error_kind: Option<&'a str>,
+    pub transport_error_kind: Option<crate::HttpTransportErrorKind>,
+    pub elapsed: Duration,
+    pub bytes_received: u64,
+    pub bytes_sent: u64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
+#[strum(serialize_all = "SCREAMING_SNAKE_CASE")]
+pub enum GrpcCallKind {
+    Unary,
+    ServerStreaming,
+    ClientStreaming,
+    BidiStreaming,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct GrpcRequestMeta<'a> {
+    /// gRPC call kind. (v1: only unary)
+    pub method: GrpcCallKind,
+    pub name: &'a str,
+    /// gRPC status code (0..=16). `None` means a transport failure before status.
+    pub status: Option<u16>,
+    /// If set, the request failed due to a transport error.
+    pub transport_error_kind: Option<crate::GrpcTransportErrorKind>,
     pub elapsed: Duration,
     pub bytes_received: u64,
     pub bytes_sent: u64,
@@ -69,12 +91,15 @@ pub struct RunSummary {
 #[derive(Debug)]
 pub struct RunStats {
     requests_total: AtomicU64,
+    http_requests_total: AtomicU64,
+    grpc_requests_total: AtomicU64,
     iterations_total: AtomicU64,
     dropped_iterations_total: AtomicU64,
     checks_total: AtomicU64,
     checks_failed: AtomicU64,
     checks_by_name: Mutex<HashMap<Arc<str>, Arc<CheckCounters>>>,
     http_errors_total: AtomicU64,
+    grpc_errors_total: AtomicU64,
     status_2xx: AtomicU64,
     status_4xx: AtomicU64,
     status_5xx: AtomicU64,
@@ -89,6 +114,9 @@ pub struct RunStats {
     metric_http_reqs: MetricHandle,
     metric_http_req_duration: MetricHandle,
     metric_http_req_failed: MetricHandle,
+    metric_grpc_reqs: MetricHandle,
+    metric_grpc_req_duration: MetricHandle,
+    metric_grpc_req_failed: MetricHandle,
     metric_checks: MetricHandle,
     metric_data_received: MetricHandle,
     metric_data_sent: MetricHandle,
@@ -178,6 +206,9 @@ impl Default for RunStats {
         let metric_http_reqs = metrics.handle(MetricKind::Counter, "http_reqs");
         let metric_http_req_duration = metrics.handle(MetricKind::Trend, "http_req_duration");
         let metric_http_req_failed = metrics.handle(MetricKind::Rate, "http_req_failed");
+        let metric_grpc_reqs = metrics.handle(MetricKind::Counter, "grpc_reqs");
+        let metric_grpc_req_duration = metrics.handle(MetricKind::Trend, "grpc_req_duration");
+        let metric_grpc_req_failed = metrics.handle(MetricKind::Rate, "grpc_req_failed");
         let metric_checks = metrics.handle(MetricKind::Rate, "checks");
         let metric_data_received = metrics.handle(MetricKind::Counter, "data_received");
         let metric_data_sent = metrics.handle(MetricKind::Counter, "data_sent");
@@ -186,12 +217,15 @@ impl Default for RunStats {
 
         Self {
             requests_total: AtomicU64::new(0),
+            http_requests_total: AtomicU64::new(0),
+            grpc_requests_total: AtomicU64::new(0),
             iterations_total: AtomicU64::new(0),
             dropped_iterations_total: AtomicU64::new(0),
             checks_total: AtomicU64::new(0),
             checks_failed: AtomicU64::new(0),
             checks_by_name: Mutex::new(HashMap::new()),
             http_errors_total: AtomicU64::new(0),
+            grpc_errors_total: AtomicU64::new(0),
             status_2xx: AtomicU64::new(0),
             status_4xx: AtomicU64::new(0),
             status_5xx: AtomicU64::new(0),
@@ -206,6 +240,9 @@ impl Default for RunStats {
             metric_http_reqs,
             metric_http_req_duration,
             metric_http_req_failed,
+            metric_grpc_reqs,
+            metric_grpc_req_duration,
+            metric_grpc_req_failed,
             metric_checks,
             metric_data_received,
             metric_data_sent,
@@ -222,6 +259,14 @@ impl RunStats {
 
     pub fn requests_total(&self) -> u64 {
         self.requests_total.load(Ordering::Relaxed)
+    }
+
+    pub fn http_requests_total(&self) -> u64 {
+        self.http_requests_total.load(Ordering::Relaxed)
+    }
+
+    pub fn grpc_requests_total(&self) -> u64 {
+        self.grpc_requests_total.load(Ordering::Relaxed)
     }
 
     pub fn bytes_received_total(&self) -> u64 {
@@ -304,6 +349,7 @@ impl RunStats {
         self.http_errors_total.load(Ordering::Relaxed)
             + self.status_4xx.load(Ordering::Relaxed)
             + self.status_5xx.load(Ordering::Relaxed)
+            + self.grpc_errors_total.load(Ordering::Relaxed)
     }
 
     pub fn iterations_total(&self) -> u64 {
@@ -335,6 +381,7 @@ impl RunStats {
 
     pub fn record_http_status(&self, status: u16) {
         self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.http_requests_total.fetch_add(1, Ordering::Relaxed);
         match status {
             200..=299 => {
                 self.status_2xx.fetch_add(1, Ordering::Relaxed);
@@ -351,7 +398,23 @@ impl RunStats {
 
     pub fn record_http_error(&self) {
         self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.http_requests_total.fetch_add(1, Ordering::Relaxed);
         self.http_errors_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_grpc_error(&self) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_errors_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_grpc_status(&self, status: u16) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_requests_total.fetch_add(1, Ordering::Relaxed);
+
+        if status != 0 {
+            self.grpc_errors_total.fetch_add(1, Ordering::Relaxed);
+        }
     }
 
     pub fn record_http_request(&self, req: HttpRequestMeta<'_>, tags: &[(String, String)]) {
@@ -360,7 +423,10 @@ impl RunStats {
         // Preserve existing aggregated summary behavior.
         if transport_error {
             self.record_http_error();
-            let kind = req.transport_error_kind.unwrap_or("transport_error");
+            let kind = req
+                .transport_error_kind
+                .map(|k| k.to_string())
+                .unwrap_or_else(|| "transport_error".to_string());
             let h = self.check_handle(&format!("http_error:{kind}"));
             self.record_check_handle(&h, false);
         } else if let Some(status) = req.status {
@@ -388,7 +454,7 @@ impl RunStats {
 
         let mut merged_tags: Vec<(String, String)> = Vec::with_capacity(tags.len() + 3);
         merged_tags.extend_from_slice(tags);
-        merged_tags.push(("method".to_string(), req.method.to_string()));
+        merged_tags.push(("method".to_string(), req.method.to_owned()));
         merged_tags.push(("name".to_string(), req.name.to_string()));
         if let Some(status) = req.status {
             merged_tags.push(("status".to_string(), status.to_string()));
@@ -400,6 +466,60 @@ impl RunStats {
 
         let failed = transport_error || req.status.is_some_and(|s| s >= 400);
         self.metric_http_req_failed
+            .add_bool_with_tags(failed, &merged_tags);
+    }
+
+    pub fn record_grpc_request(&self, req: GrpcRequestMeta<'_>, tags: &[(String, String)]) {
+        let transport_error = req.transport_error_kind.is_some();
+
+        // Preserve existing aggregated summary behavior (as checks).
+        if transport_error {
+            self.record_grpc_error();
+            let kind = req
+                .transport_error_kind
+                .map(|k| k.to_string())
+                .unwrap_or_else(|| "transport_error".to_string());
+            let h = self.check_handle(&format!("grpc_error:{kind}"));
+            self.record_check_handle(&h, false);
+        } else if let Some(status) = req.status {
+            // gRPC: status 0 == OK, anything else is an error.
+            self.record_grpc_status(status);
+            if status != 0 {
+                let h = self.check_handle(&format!("grpc_status:{status}"));
+                self.record_check_handle(&h, false);
+            }
+        }
+
+        self.record_latency(req.elapsed);
+
+        if req.bytes_received != 0 {
+            self.bytes_received_total
+                .fetch_add(req.bytes_received, Ordering::Relaxed);
+            self.metric_data_received.add(req.bytes_received as f64);
+        }
+
+        if req.bytes_sent != 0 {
+            self.bytes_sent_total
+                .fetch_add(req.bytes_sent, Ordering::Relaxed);
+            self.metric_data_sent.add(req.bytes_sent as f64);
+        }
+
+        let duration_ms = req.elapsed.as_secs_f64() * 1000.0;
+
+        let mut merged_tags: Vec<(String, String)> = Vec::with_capacity(tags.len() + 3);
+        merged_tags.extend_from_slice(tags);
+        merged_tags.push(("method".to_string(), req.method.to_string()));
+        merged_tags.push(("name".to_string(), req.name.to_string()));
+        if let Some(status) = req.status {
+            merged_tags.push(("status".to_string(), status.to_string()));
+        }
+
+        self.metric_grpc_reqs.add_with_tags(1.0, &merged_tags);
+        self.metric_grpc_req_duration
+            .add_with_tags(duration_ms, &merged_tags);
+
+        let failed = transport_error || req.status.is_some_and(|s| s != 0);
+        self.metric_grpc_req_failed
             .add_bool_with_tags(failed, &merged_tags);
     }
 

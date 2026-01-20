@@ -69,6 +69,7 @@ pub(crate) fn render_run_summary(summary: &wrkr_core::runner::RunSummary) {
     let elapsed_s = (summary.run_duration_ms as f64) / 1000.0;
 
     let http_reqs = metric_counter(summary, "http_reqs").unwrap_or(summary.requests_total as f64);
+    let grpc_reqs = metric_counter(summary, "grpc_reqs").unwrap_or(0.0);
     let data_received =
         metric_counter(summary, "data_received").unwrap_or(summary.bytes_received_total as f64);
     let data_sent = metric_counter(summary, "data_sent").unwrap_or(summary.bytes_sent_total as f64);
@@ -76,16 +77,28 @@ pub(crate) fn render_run_summary(summary: &wrkr_core::runner::RunSummary) {
     let iterations = metric_counter(summary, "iterations").unwrap_or(0.0);
 
     let dur = metric_trend_stats(summary, "http_req_duration");
+    let grpc_dur = metric_trend_stats(summary, "grpc_req_duration");
     let iter_dur = metric_trend_stats(summary, "iteration_duration");
 
     let (_checks_rate, _checks_total, _checks_trues) = metric_rate_stats(summary, "checks");
     let (failed_rate, failed_total, failed_trues) = metric_rate_stats(summary, "http_req_failed");
+    let (grpc_failed_rate, grpc_failed_total, grpc_failed_trues) =
+        metric_rate_stats(summary, "grpc_req_failed");
 
     let http_failed = failed_trues;
     let http_ok = failed_total.saturating_sub(failed_trues);
 
+    let grpc_failed = grpc_failed_trues;
+    let grpc_ok = grpc_failed_total.saturating_sub(grpc_failed_trues);
+
     let rps = if elapsed_s > 0.0 {
         http_reqs / elapsed_s
+    } else {
+        0.0
+    };
+
+    let grpc_rps = if elapsed_s > 0.0 {
+        grpc_reqs / elapsed_s
     } else {
         0.0
     };
@@ -113,6 +126,16 @@ pub(crate) fn render_run_summary(summary: &wrkr_core::runner::RunSummary) {
         http_failed,
         http_ok,
         &dur,
+    );
+
+    render_grpc_section(
+        grpc_reqs,
+        grpc_rps,
+        grpc_failed_rate,
+        grpc_failed_total,
+        grpc_failed,
+        grpc_ok,
+        &grpc_dur,
     );
     render_execution_section(iterations, elapsed_s, &iter_dur);
     render_network_section(data_received, bps, data_sent, bps_sent);
@@ -197,6 +220,53 @@ fn render_http_section(
     println!(
         "    http_reqs.......................: {total} ({rps:.5}/s)\n",
         total = http_reqs.round() as u64,
+        rps = rps
+    );
+}
+
+fn render_grpc_section(
+    grpc_reqs: f64,
+    rps: f64,
+    failed_rate: Option<f64>,
+    failed_total: u64,
+    grpc_failed: u64,
+    grpc_ok: u64,
+    dur: &TrendStats,
+) {
+    if grpc_reqs == 0.0 {
+        return;
+    }
+
+    println!("  GRPC");
+    println!(
+        "    grpc_req_duration..............: avg={avg} min={min} med={med} max={max} p(90)={p90} p(95)={p95}",
+        avg = format_duration_ms_opt(dur.avg),
+        min = format_duration_ms_opt(dur.min),
+        med = format_duration_ms_opt(dur.med),
+        max = format_duration_ms_opt(dur.max),
+        p90 = format_duration_ms_opt(dur.p90),
+        p95 = format_duration_ms_opt(dur.p95),
+    );
+
+    if grpc_ok + grpc_failed != 0 {
+        let rate = failed_rate.unwrap_or_else(|| {
+            if failed_total == 0 {
+                0.0
+            } else {
+                (grpc_failed as f64) / (failed_total as f64)
+            }
+        });
+        println!(
+            "    grpc_req_failed.................: {pct:.2}%  {failed} out of {total}",
+            pct = rate * 100.0,
+            failed = grpc_failed,
+            total = failed_total
+        );
+    }
+
+    println!(
+        "    grpc_reqs.......................: {total} ({rps:.5}/s)\n",
+        total = grpc_reqs.round() as u64,
         rps = rps
     );
 }
