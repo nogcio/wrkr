@@ -35,6 +35,11 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libluajit-5.1-dev
 
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -43,6 +48,9 @@ jobs:
 
       - name: Run tests
         run: cargo test --workspace
+
+      - name: Check security advisories
+        run: cargo deny check advisories
 
       - name: Build project
         run: cargo build --workspace --verbose
