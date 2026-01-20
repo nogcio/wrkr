@@ -38,8 +38,10 @@ jobs:
         include:
           # Build each platform natively to avoid slow QEMU emulation.
           - platform: linux/amd64
+            platform_slug: linux-amd64
             runner: ubuntu-latest
           - platform: linux/arm64
+            platform_slug: linux-arm64
             runner: ubuntu-latest
 
     steps:
@@ -142,7 +144,7 @@ jobs:
       - name: Upload digest artifact
         uses: actions/upload-artifact@v4
         with:
-          name: digests-${{ matrix.platform }}
+          name: digests-${{ matrix.platform_slug }}
           path: /tmp/digests/*
           if-no-files-found: error
 
