@@ -19,42 +19,6 @@
     ],
     "configurations": [
         {
-            "name": "Debug wfb-runner",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "run",
-                    "--bin=wfb-runner",
-                    "--package=wfb-runner"
-                ]
-            },
-            "args": [
-                "run",
-                "test_run_1",
-                "--env",
-                "local"
-            ]
-        },
-
-        {
-            "name": "Debug wfb-server",
-            "type": "lldb",
-            "request": "launch",
-            "cargo": {
-                "args": [
-                    "run",
-                    "--bin=wfb-server",
-                    "--package=wfb-server"
-                ]
-            },
-            "env": {
-                "GITHUB_TOKEN": "${env:GITHUB_TOKEN}"
-            },
-            "args": []
-        },
-
-        {
             "name": "Debug wrkr (Lua script)",
             "type": "lua-local",
             "request": "launch",
