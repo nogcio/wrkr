@@ -37,11 +37,10 @@ jobs:
       matrix:
         include:
           # Build each platform natively to avoid slow QEMU emulation.
-          # `ubuntu-24.04-arm64` is a GitHub-hosted ARM runner.
           - platform: linux/amd64
             runner: ubuntu-latest
           - platform: linux/arm64
-            runner: ubuntu-24.04-arm64
+            runner: macos-15
 
     steps:
       - name: Checkout repository
@@ -82,6 +81,10 @@ jobs:
       # https://github.com/docker/setup-buildx-action
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3.12.0
+
+      - name: Set up QEMU (for arm64 on x64 runners)
+        if: ${{ matrix.platform == 'linux/arm64' && runner.arch != 'ARM64' }}
+        uses: docker/setup-qemu-action@v3
 
       # Login against a Docker registry except on PR
       # https://github.com/docker/login-action
