@@ -1,6 +1,7 @@
 .DEFAULT_GOAL := help
 
 CARGO ?= cargo
+CARGO_DENY ?= cargo deny
 
 # Runtime defaults for `make run`
 BASE_URL ?= http://127.0.0.1:12345
@@ -8,7 +9,7 @@ SCRIPT ?= examples/plaintext.lua
 # Extra args passed to `wrkr run ...` (e.g. WRKR_RUN_ARGS='--vus 50 --duration 10s')
 WRKR_RUN_ARGS ?=
 
-.PHONY: help fmt fmt-check clippy test build build-release run run-release testserver clean check
+.PHONY: help fmt fmt-check clippy test build build-release run run-release testserver clean check install-tools advisories
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_\-]+:.*##/ {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -43,4 +44,11 @@ testserver: ## Run local test server (prints BASE_URL)
 clean: ## Remove build artifacts
 	$(CARGO) clean
 
-check: fmt-check clippy test ## Run format check + clippy + tests
+install-tools: ## Install local CLI tools (cargo-deny)
+	@command -v cargo-deny >/dev/null 2>&1 || (echo "Installing cargo-deny..." && $(CARGO) install cargo-deny --locked)
+
+advisories: ## Check RustSec advisories (cargo-deny)
+	@command -v cargo-deny >/dev/null 2>&1 || (echo "cargo-deny not found. Run 'make install-tools' first." && exit 1)
+	$(CARGO_DENY) check advisories
+
+check: fmt-check clippy test advisories ## Run format check + clippy + tests + advisories

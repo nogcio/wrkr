@@ -55,6 +55,7 @@
 		- When debugging is enabled, we switch to `mlua::Lua::unsafe_new()` to make the `debug` stdlib available for `lldebugger`.
 
 - **Validation workflow**: before handing off a change, run formatting, linting, and tests to ensure correctness: `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --workspace` (or the narrowest applicable subset).
+- **Dependency changes require advisory scan**: if you add/update/remove dependencies (i.e. change `Cargo.toml` and/or `Cargo.lock`), you MUST also run `cargo deny check advisories` (or `make advisories`) and address any new RustSec advisories.
 
 - **Rust 2024 + clippy is the contract**: treat `cargo clippy --all-targets -- -D warnings` as a hard requirement. If clippy would warn, consider the change broken.
 
