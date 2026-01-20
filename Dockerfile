@@ -21,7 +21,7 @@ COPY . .
 RUN cargo build --release -p wrkr --locked
 
 # Runtime stage
-FROM alpine:3.20
+FROM alpine:3.23
 RUN apk add --no-cache ca-certificates luajit \
 	&& addgroup -S wrkr \
 	&& adduser -S wrkr -G wrkr
