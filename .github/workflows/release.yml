@@ -68,6 +68,7 @@ jobs:
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: wrkr
+          archive: $bin-$tag-$target
           target: ${{ matrix.target }}
           # tar for unix, zip for windows
           tar: unix
