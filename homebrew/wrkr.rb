@@ -1,8 +1,7 @@
 class Wrkr < Formula
   desc "Fast, scriptable load testing tool"
   homepage "https://github.com/nogcio/wrkr"
-  version "v0.0.1"  license "AGPL-3.0-only"
-
+  version "v0.0.1"
   on_macos do
     on_arm do
       url "https://github.com/nogcio/wrkr/releases/download/#{version}/wrkr-#{version}-aarch64-apple-darwin.tar.gz"
