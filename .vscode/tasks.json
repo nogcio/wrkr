@@ -1,0 +1,60 @@
+{
+  "version": "2.0.0",
+  "inputs": [
+    {
+      "id": "wrkr_lua_script",
+      "type": "promptString",
+      "description": "Lua script path for `wrkr run`",
+      "default": "examples/plaintext.lua"
+    },
+    {
+      "id": "wrkr_base_url",
+      "type": "promptString",
+      "description": "BASE_URL for scripts",
+      "default": "http://localhost:54320"
+    }
+  ],
+  "tasks": [
+    {
+      "label": "cargo: test (workspace)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["test", "--workspace"],
+      "group": "test",
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "cargo: fmt (workspace)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["fmt", "--all"],
+      "problemMatcher": []
+    },
+    {
+      "label": "cargo: clippy (workspace, deny warnings)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["clippy", "--all-targets", "--", "-D", "warnings"],
+      "problemMatcher": ["$rustc"]
+    },
+    {
+      "label": "run: wrkr (lua script)",
+      "type": "shell",
+      "command": "cargo",
+      "args": [
+        "run",
+        "--bin",
+        "wrkr",
+        "--",
+        "run",
+        "${input:wrkr_lua_script}"
+      ],
+      "options": {
+        "env": {
+          "BASE_URL": "${input:wrkr_base_url}"
+        }
+      },
+      "problemMatcher": ["$rustc"]
+    }
+  ]
+}

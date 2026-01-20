@@ -1,0 +1,7 @@
+# Local-only VS Code overrides
+settings.local.json
+launch.local.json
+tasks.local.json
+
+# Workspace files created by extensions
+*.log

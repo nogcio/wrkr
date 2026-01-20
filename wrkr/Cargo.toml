@@ -1,0 +1,32 @@
+[package]
+name = "wrkr"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+humantime = "2"
+indicatif = "0.17"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "fs",
+    "io-util",
+    "process",
+] }
+mimalloc = "0.1.48"
+wrkr-core = { path = "../wrkr-core" }
+wrkr-lua = { path = "../wrkr-lua" }
+
+[dev-dependencies]
+wrkr-testserver = { path = "../wrkr-testserver" }
+
+[lints]
+workspace = true

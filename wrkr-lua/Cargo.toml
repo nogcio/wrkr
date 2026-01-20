@@ -1,0 +1,38 @@
+[package]
+name = "wrkr-lua"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+bytes = "1"
+humantime = "2"
+mlua = { version = "0.11", features = [
+    "luajit",
+    "async",
+    "macros",
+    "serialize",
+    "send",
+    "vendored",
+] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde-transcode = "1"
+thiserror = "2"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "time",
+] }
+url = "2"
+wrkr-core = { path = "../wrkr-core" }
+
+[dev-dependencies]
+wrkr-testserver = { path = "../wrkr-testserver" }
+
+[lints]
+workspace = true

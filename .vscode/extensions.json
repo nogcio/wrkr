@@ -1,0 +1,11 @@
+{
+    "recommendations": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "sumneko.lua",
+        "tomblind.local-lua-debugger-vscode",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "streetsidesoftware.code-spell-checker"
+    ]
+}

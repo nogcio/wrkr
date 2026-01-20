@@ -1,0 +1,22 @@
+[workspace]
+resolver = "3"
+members = ["wrkr", "wrkr-core", "wrkr-lua", "wrkr-testserver"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+authors = ["Andrew Sumskoy <getansum@nogc.io>"]
+license = "MIT"
+homepage = "https://wrkr.nogc.io"
+repository = "https://github.com/nogcio/wrkr"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+# panic = "abort"
+strip = true
