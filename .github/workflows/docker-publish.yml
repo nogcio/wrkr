@@ -55,7 +55,13 @@ jobs:
           CARGO_VERSION=$(awk '
             $0 ~ /^\[workspace\.package\]/ { in_wp=1; next }
             in_wp && $0 ~ /^\[.*\]/ { in_wp=0 }
-            in_wp && match($0, /^version\s*=\s*"([^"]+)"/, m) { print m[1]; exit }
+            in_wp && $0 ~ /^version[[:space:]]*=/ {
+              line=$0
+              sub(/^[^"]*"/, "", line)
+              sub(/".*$/, "", line)
+              print line
+              exit
+            }
           ' Cargo.toml)
 
           if [ -z "$CARGO_VERSION" ]; then
