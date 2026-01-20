@@ -36,27 +36,16 @@ Pull the published image (built on release tags):
 docker pull nogcio/wrkr:<version>
 ```
 
-### Cargo (from source)
+### From source (development)
 
-From source (recommended while developing):
+This project is distributed via GitHub Releases (binaries), Docker, and Homebrew.
+If you’re developing locally:
 
 ```bash
 cargo build --release
 ```
 
 Binary will be at `./target/release/wrkr`.
-
-Or install into Cargo bin dir:
-
-```bash
-cargo install --path wrkr
-```
-
-If you have Rust installed and want to install from the repo:
-
-```bash
-cargo install --git https://github.com/nogcio/wrkr --locked --bin wrkr
-```
 
 ## Quick start
 
@@ -156,6 +145,15 @@ See [`examples/`](examples/) for ready-to-run scripts:
 - `examples/lifecycle.lua` (Setup/Teardown/HandleSummary hooks)
 - `examples/ramping_vus.lua`
 - `examples/ramping_arrival_rate.lua`
+
+## Documentation
+
+This repo includes an mdBook under `docs/`.
+
+- Build: `mdbook build docs`
+- Serve locally: `mdbook serve docs --open`
+
+Published docs (GitHub Pages): `https://nogcio.github.io/wrkr/`
 
 ## Development
 

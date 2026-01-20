@@ -9,7 +9,7 @@ SCRIPT ?= examples/plaintext.lua
 # Extra args passed to `wrkr run ...` (e.g. WRKR_RUN_ARGS='--vus 50 --duration 10s')
 WRKR_RUN_ARGS ?=
 
-.PHONY: help fmt fmt-check clippy test build build-release run run-release testserver clean check install-tools advisories
+.PHONY: help fmt fmt-check clippy test build build-release run run-release testserver clean check install-tools advisories docs docs-serve
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_\-]+:.*##/ {printf "\033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -52,3 +52,11 @@ advisories: ## Check RustSec advisories (cargo-deny)
 	$(CARGO_DENY) check advisories
 
 check: fmt-check clippy test advisories ## Run format check + clippy + tests + advisories
+
+docs: ## Build documentation (mdBook)
+	@command -v mdbook >/dev/null 2>&1 || (echo "mdbook not found. Install with: cargo install mdbook --locked" && exit 1)
+	mdbook build docs
+
+docs-serve: ## Serve documentation locally (mdBook)
+	@command -v mdbook >/dev/null 2>&1 || (echo "mdbook not found. Install with: cargo install mdbook --locked" && exit 1)
+	mdbook serve docs --open

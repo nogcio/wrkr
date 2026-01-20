@@ -1,1 +1,8 @@
 /target
+
+# mdBook build output
+/docs/book
+/docs/.mdbook
+
+# macOS
+.DS_Store

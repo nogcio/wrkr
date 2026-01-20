@@ -1,0 +1,15 @@
+[book]
+title = "wrkr"
+authors = ["Andrew Sumskoy <getansum@nogc.io>"]
+description = "Fast, scriptable load testing tool"
+language = "en"
+src = "src"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/nogcio/wrkr"
+edit-url-template = "https://github.com/nogcio/wrkr/edit/main/docs/{path}"
+
+[output.html.fold]
+enable = true
