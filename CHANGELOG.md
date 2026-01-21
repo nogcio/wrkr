@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - CI: allow reusable checks workflow to request `checks: write` and `pull-requests: read`. ([6a3798b](https://github.com/nogcio/wrkr/commit/6a3798bee00cf197b98391aeaf7e3af62dce40b9))
 - CI: use system LuaJIT and `protoc` where appropriate. ([1c1d9a8](https://github.com/nogcio/wrkr/commit/1c1d9a80b95ccb5204d9fe1d95c653b3a2609521))
 - CI: fix Windows `protoc` include discovery for bundling. ([d763754](https://github.com/nogcio/wrkr/commit/d763754e8764909b0fcf8b92e9e36ae12d211755))
+- CI: fix Windows LuaJIT build by initializing MSVC environment. ([7575a72](https://github.com/nogcio/wrkr/commit/7575a7297cdf0b075f333f1cb38c5b5e0c399e5e))
 
 ## [0.0.1] - 2026-01-20
 
