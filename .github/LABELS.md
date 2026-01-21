@@ -13,22 +13,24 @@ Use exactly one per issue:
 - `p2` — normal priority
 - `p3` — nice-to-have / long tail
 
-## Type
+## Issue type (GitHub feature)
 
-Use exactly one per issue/PR:
+GitHub supports a built-in **Issue type** field (Bug/Feature/etc). When enabled, prefer that field over `type:*` labels to avoid duplication.
 
-- `type:bug`
-- `type:feature`
-- `type:docs`
-- `type:refactor`
-- `type:perf`
-- `type:ci`
+Suggested issue types to create/use:
+
+- Bug
+- Feature
+- Documentation
+- Refactor
+- Performance
+- CI/Release
 
 ## Area
 
 Use one (or a small number) based on ownership:
 
-- `area:wrkr` — `wrkr/` (binary)
+- `area:cli` — `wrkr/` (binary)
 - `area:wrkr-core` — core runner, HTTP/gRPC
 - `area:wrkr-lua` — Lua engine, built-in modules, LuaLS stubs
 - `area:wrkr-value` — cross-language value contract
@@ -51,6 +53,6 @@ Use when triaging/communicating blockers:
 
 ## Usage rules
 
-- Issues: `priority` + `type` + `area` (and `status` only if needed).
-- PRs: `type` + `area` (and `breaking-change` when applicable).
+- Issues: `priority` + `area` (and `status` only if needed) + set **Issue type**.
+- PRs: `area` (and `breaking-change` when applicable).
 - Don’t encode status in milestones. Milestones represent the release plan only.

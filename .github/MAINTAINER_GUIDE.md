@@ -13,8 +13,8 @@ Goal: keep the issue tracker actionable and easy to navigate.
 Suggested triage steps:
 
 1) **Classify**
-- Apply a `type:*` label (`type:bug`, `type:feature`, `type:docs`, `type:refactor`, `type:ci`).
-- Apply an `area:*` label (`area:wrkr-core`, `area:wrkr-lua`, `area:cli`, `area:docs`, `area:ci`).
+- Set the GitHub **Issue type** (Bug/Feature/Documentation/etc).
+- Apply an `area:*` label (`area:wrkr-core`, `area:wrkr-lua`, `area:cli`, `area:docs`, `area:release`).
 
 2) **Prioritize**
 - Apply `p0`..`p3` (or your equivalent). Keep the meaning consistent:
