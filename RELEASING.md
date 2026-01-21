@@ -47,13 +47,13 @@ git push origin vX.Y.Z
 CI should:
 - create a GitHub Release using `CHANGELOG.md`
 - build and upload release binaries
-- update `homebrew/wrkr.rb` on `main`
+- update the Homebrew tap formula in `nogcio/homebrew-wrkr` (`Formula/wrkr.rb`)
 - publish the Docker image
 
 ## After the release
 
 - Verify the GitHub Release assets look correct.
-- Verify Homebrew formula update landed on `main`.
+- Verify Homebrew formula update landed in `nogcio/homebrew-wrkr`.
 - Spot-check `docker pull nogcio/wrkr:X.Y.Z` (or the version tag you published).
 
 ## Notes

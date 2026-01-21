@@ -16,13 +16,14 @@ Today, `wrkr` is script-driven via Lua (see [`wrkr-lua/README.md`](wrkr-lua/READ
 
 ### Homebrew (macOS)
 
-Install via a formula URL (no Rust toolchain required):
+Install via Homebrew tap (no Rust toolchain required):
 
 ```bash
-brew install --formula https://raw.githubusercontent.com/nogcio/wrkr/main/homebrew/wrkr.rb
+brew tap nogcio/wrkr
+brew install wrkr
 ```
 
-Note: the formula in `main` is updated by CI when you publish a release tag like `vX.Y.Z`.
+Note: the tap formula is published to `nogcio/homebrew-wrkr` (tap name: `nogcio/wrkr`) when you publish a release tag like `vX.Y.Z`.
 
 ### GitHub Releases (binaries)
 

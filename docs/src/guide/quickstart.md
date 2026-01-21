@@ -7,7 +7,8 @@ Pick one:
 - Homebrew (macOS):
 
 ```bash
-brew install --formula https://raw.githubusercontent.com/nogcio/wrkr/main/homebrew/wrkr.rb
+brew tap nogcio/wrkr
+brew install wrkr
 ```
 
 - GitHub Releases (binaries): download `wrkr` and put it on your `PATH`.
