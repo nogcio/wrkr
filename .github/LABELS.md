@@ -4,6 +4,11 @@ This repo uses labels to keep issues/PRs searchable and to make milestone planni
 
 The intent is to keep the set **small and stable**. If a label doesn’t help filtering or planning, don’t add it.
 
+General rule of thumb:
+
+- Issues: set a GitHub **Issue Type** + apply **one** `p*` priority label + **one** `area:*` label (and `status:*` only when needed).
+- PRs: apply `area:*` (and `breaking-change` when applicable).
+
 ## Priority
 
 Use exactly one per issue:
@@ -13,11 +18,11 @@ Use exactly one per issue:
 - `p2` — normal priority
 - `p3` — nice-to-have / long tail
 
-## Issue type (GitHub feature)
+## Issue Type (GitHub feature)
 
-GitHub supports a built-in **Issue type** field (Bug/Feature/etc). When enabled, prefer that field over `type:*` labels to avoid duplication.
+We use GitHub’s built-in **Issue Type** field as the primary classification for “what kind of work is this?”.
 
-Suggested issue types to create/use:
+Recommended issue types:
 
 - Bug
 - Feature
@@ -31,8 +36,11 @@ Suggested issue types to create/use:
 Use one (or a small number) based on ownership:
 
 - `area:cli` — `wrkr/` (binary)
+- `area:wrkr` — overall project / cross-cutting changes
 - `area:wrkr-core` — core runner, HTTP/gRPC
 - `area:wrkr-lua` — Lua engine, built-in modules, LuaLS stubs
+- `area:wrkr-js` — embedded JavaScript engine (when/if present)
+- `area:wrkr-py` — embedded Python engine (when/if present)
 - `area:wrkr-value` — cross-language value contract
 - `area:docs` — mdBook, READMEs, examples
 - `area:release` — packaging, CI, Docker, Homebrew
@@ -53,6 +61,6 @@ Use when triaging/communicating blockers:
 
 ## Usage rules
 
-- Issues: `priority` + `area` (and `status` only if needed) + set **Issue type**.
-- PRs: `area` (and `breaking-change` when applicable).
+- Issues: set **Issue Type** + `p*` + `area:*` (and `status:*` only if needed).
+- PRs: `area:*` (and `breaking-change` when applicable).
 - Don’t encode status in milestones. Milestones represent the release plan only.

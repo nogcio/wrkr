@@ -13,8 +13,8 @@ Goal: keep the issue tracker actionable and easy to navigate.
 Suggested triage steps:
 
 1) **Classify**
-- Set the GitHub **Issue type** (Bug/Feature/Documentation/etc).
-- Apply an `area:*` label (`area:wrkr-core`, `area:wrkr-lua`, `area:cli`, `area:docs`, `area:release`).
+- Set the GitHub **Issue Type** (Bug/Feature/Documentation/etc).
+- Apply an `area:*` label (`area:wrkr-core`, `area:wrkr-lua`, `area:wrkr-js`, `area:wrkr-py`, `area:cli`, `area:docs`, `area:release`).
 
 2) **Prioritize**
 - Apply `p0`..`p3` (or your equivalent). Keep the meaning consistent:
@@ -36,7 +36,8 @@ Suggested triage steps:
 
 Use milestones as the release plan.
 
-- Create milestones named like `vX.Y.Z`.
+- Create milestones named like `X.Y.Z` (e.g. `0.1.0`).
+- Release tags are `vX.Y.Z` (e.g. `v0.1.0`).
 - Put issues and PRs into a milestone only when you expect them to ship in that release.
 - Prefer a small, credible milestone over a huge backlog dump.
 
