@@ -23,6 +23,8 @@ on:
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: read
 
 jobs:
   checks:

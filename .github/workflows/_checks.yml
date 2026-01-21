@@ -5,6 +5,8 @@ on:
 
 permissions:
   contents: read
+  checks: write
+  pull-requests: read
 
 jobs:
   checks:
@@ -24,12 +26,17 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y libluajit-5.1-dev
+        run: sudo apt-get update && sudo apt-get install -y libluajit-5.1-dev pkg-config protobuf-compiler
 
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-deny
+
+      - name: Install cargo-nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -38,7 +45,22 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo test --workspace
+        run: cargo nextest run --workspace --junit-path target/nextest/junit.xml
+
+      - name: Report test results
+        if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
+        uses: dorny/test-reporter@v1
+        with:
+          name: Rust tests
+          path: target/nextest/junit.xml
+          reporter: java-junit
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results
+          path: target/nextest/junit.xml
 
       - name: Build workspace
         run: cargo build --workspace --verbose

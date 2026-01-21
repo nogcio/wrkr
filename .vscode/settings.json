@@ -20,5 +20,6 @@
     "chat.tools.terminal.autoApprove": {
         "cargo clippy": true,
         "cargo fmt": true
-    }
+    },
+    "makefile.configureOnOpen": false
 }

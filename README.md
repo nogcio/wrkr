@@ -28,6 +28,18 @@ Note: the formula in `main` is updated by CI when you publish a release tag like
 
 Download a prebuilt binary from GitHub Releases and put `wrkr` on your `PATH`.
 
+Note: `wrkr` links against system LuaJIT. You may need to install it:
+
+- macOS (Homebrew): `brew install luajit`
+- Linux (Debian/Ubuntu): `sudo apt-get install -y libluajit-5.1-2`
+- Windows: release archive includes `lua51.dll` next to `wrkr.exe`
+
+Note: gRPC support requires `protoc` at runtime when you load `.proto` files.
+
+- macOS (Homebrew): `brew install protobuf`
+- Linux (Debian/Ubuntu): `sudo apt-get install -y protobuf-compiler`
+- Windows: release archive includes `protoc.exe` and `protoc-include/` next to `wrkr.exe` (or set `PROTOC` to override)
+
 ### Docker
 
 Pull the published image (built on release tags):

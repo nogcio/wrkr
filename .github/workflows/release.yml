@@ -64,7 +64,70 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      - name: Upload wrkr binary to GitHub Release
+      - name: Install protoc (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y protobuf-compiler
+
+      - name: Install protoc (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install protobuf
+
+      - name: Install protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: choco install protobuf -y
+
+      - name: Bundle protoc (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $protoc = (Get-Command protoc.exe).Source
+          if (-not $protoc) {
+            throw "protoc.exe not found after installing protobuf"
+          }
+
+          Copy-Item $protoc $env:GITHUB_WORKSPACE\protoc.exe
+
+          $protocDir = Split-Path $protoc -Parent
+          $includeDir = Resolve-Path (Join-Path $protocDir "..\include") | Select-Object -ExpandProperty Path
+          $sentinel = Join-Path $includeDir "google\protobuf\any.proto"
+          if (-not (Test-Path $sentinel)) {
+            throw "Protobuf include dir not found next to protoc.exe (expected $sentinel)"
+          }
+
+          if (Test-Path $env:GITHUB_WORKSPACE\protoc-include) {
+            Remove-Item -Recurse -Force $env:GITHUB_WORKSPACE\protoc-include
+          }
+          New-Item -ItemType Directory -Force $env:GITHUB_WORKSPACE\protoc-include | Out-Null
+          Copy-Item -Recurse -Force (Join-Path $includeDir "*") $env:GITHUB_WORKSPACE\protoc-include
+
+      - name: Install LuaJIT (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: sudo apt-get update && sudo apt-get install -y libluajit-5.1-dev pkg-config
+
+      - name: Install LuaJIT (macOS)
+        if: startsWith(matrix.os, 'macos')
+        run: brew install luajit pkg-config
+
+      - name: Build LuaJIT (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch v2.1.0-beta3 https://github.com/LuaJIT/LuaJIT.git luajit
+          cd luajit\src
+          .\msvcbuild.bat
+          Copy-Item .\lua51.dll $env:GITHUB_WORKSPACE\lua51.dll
+          Copy-Item .\lua51.lib $env:GITHUB_WORKSPACE\lua51.lib
+
+      - name: Configure LuaJIT linking (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          "LUA_LIB_NAME=lua51" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "LUA_LIB=$env:GITHUB_WORKSPACE" | Out-File -FilePath $env:GITHUB_ENV -Append
+
+      - name: Upload wrkr binary to GitHub Release (non-Windows)
+        if: matrix.os != 'windows-latest'
         uses: taiki-e/upload-rust-binary-action@v1
         with:
           bin: wrkr
@@ -75,6 +138,20 @@ jobs:
           zip: windows
           checksum: sha256
           include: LICENSE,README.md
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Upload wrkr binary to GitHub Release (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: wrkr
+          archive: $bin-$tag-$target
+          target: ${{ matrix.target }}
+          # tar for unix, zip for windows
+          tar: unix
+          zip: windows
+          checksum: sha256
+          include: LICENSE,README.md,lua51.dll,protoc.exe,protoc-include
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
   update-homebrew-formula:
@@ -121,8 +198,8 @@ jobs:
 
           ruby -i -pe '$_ = $_
             .gsub(/^\s*version\s+".*"\s*$/, "  version \"#{ENV.fetch("TAG")}\"")
-            .gsub("__SHA256_MAC_ARM64__", ENV.fetch("SHA_ARM"))
-            .gsub("__SHA256_MAC_X86_64__", ENV.fetch("SHA_INTEL"))
+            .gsub(/(on_arm do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{ENV.fetch(\"SHA_ARM\")}\\2")
+            .gsub(/(on_intel do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{ENV.fetch(\"SHA_INTEL\")}\\2")
           ' homebrew/wrkr.rb
 
         shell: bash

@@ -11,10 +11,9 @@ tonic = "0.14.2"
 tonic-build = "0.14.2"
 tonic-prost-build = "0.14.2"
 tonic-prost = "0.14.2"
-protoc-bin-vendored = "3.2.0"
 
 [workspace.package]
-version = "0.0.1"
+version = "0.0.2"
 edition = "2024"
 authors = ["Andrew Sumskoy <getansum@nogc.io>"]
 license = "AGPL-3.0-only"
