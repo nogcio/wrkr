@@ -272,11 +272,18 @@ jobs:
 
           cd "$GITHUB_WORKSPACE"
 
-          ruby -i -pe '$_ = $_
-            .gsub(/^\s*version\s+".*"\s*$/, "  version \"#{ENV.fetch("TAG")}\"")
-            .gsub(/(on_arm do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{ENV.fetch(\"SHA_ARM\")}\\2")
-            .gsub(/(on_intel do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{ENV.fetch(\"SHA_INTEL\")}\\2")
-          ' homebrew/wrkr.rb
+          ruby <<'RUBY'
+          file = "homebrew/wrkr.rb"
+          tag = ENV.fetch("TAG")
+          sha_arm = ENV.fetch("SHA_ARM")
+          sha_intel = ENV.fetch("SHA_INTEL")
+
+          contents = File.read(file)
+          contents = contents.gsub(/^\s*version\s+".*"\s*$/, "  version \"#{tag}\"")
+          contents = contents.gsub(/(on_arm do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{sha_arm}\\2")
+          contents = contents.gsub(/(on_intel do.*?^\s*sha256\s+\")[^\"]*(\")/m, "\\1#{sha_intel}\\2")
+          File.write(file, contents)
+          RUBY
 
         shell: bash
 
