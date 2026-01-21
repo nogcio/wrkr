@@ -10,6 +10,8 @@
 - **Performance is critical**: prefer efficient algorithms/data structures and avoid unnecessary work.
 - **No cutting corners**: if something is unclear or doesn’t work, read the docs/sources instead of adding brittle hacks.
 - **Keep documentation up to date**: update relevant docs/README/architecture notes alongside code changes so documentation reflects the current behavior.
+- **Issues (formatting is mandatory)**: when working from a GitHub issue, ALWAYS first find and read the repo’s issue formatting rules/templates (e.g. `.github/ISSUE_TEMPLATE/*`, `CONTRIBUTING.md`, and any docs referenced by the issue). Then follow those rules exactly in any new issue, comment, or status update (required sections, labels, reproduction steps, acceptance criteria, etc.). If the required format is unclear or missing info is needed, ask for it before proceeding.
+- **Issues (repo context is mandatory)**: when working with issues/PRs, ALWAYS explicitly state which repository you’re operating on (e.g. `nogcio/wrkr`) at the start of your first update/response, before making any issue/PR writes.
 - **Modularity and small files**: don’t pile everything into one place; keep code split into focused modules with clear boundaries.
 - **Modularity is non-negotiable**: different entities belong in different files/modules; when introducing a new “thing” (type/module/API), create a dedicated file/module for it rather than appending it to an unrelated one.
 - **Idiomatic Rust & best practices**: keep the project idiomatic and follow Rust best practices (standard tooling like `cargo fmt`/`clippy`, clear ownership/lifetimes, avoid `unsafe` unless justified, and prefer conventional crate/module organization).
