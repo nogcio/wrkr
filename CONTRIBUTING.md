@@ -96,6 +96,19 @@ cargo test --workspace
 
 4) Open a PR against `main`.
 
+## Issues, triage, and milestones
+
+- Please use the issue templates (Bug report / Feature request / Documentation request).
+- For usage questions (“how do I…?”), prefer GitHub Discussions.
+- Maintainers will apply priority/area labels and assign milestones.
+- If you want to work on an issue, comment on it first so we can align on approach and scope.
+
+Maintainer-facing workflow notes live in `.github/MAINTAINER_GUIDE.md`.
+
+For the recommended label set and release steps:
+- `.github/LABELS.md`
+- `RELEASING.md`
+
 ## Release/versioning notes
 
 Releases are cut from tags `vX.Y.Z`. CI builds binaries, publishes Docker images, and updates the Homebrew formula (see workflows under `.github/workflows/`).
