@@ -139,15 +139,21 @@ jobs:
         if: startsWith(matrix.os, 'macos')
         run: brew install luajit pkg-config
 
+      - name: Setup MSVC (Windows)
+        if: matrix.os == 'windows-latest'
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
       - name: Build LuaJIT (Windows)
         if: matrix.os == 'windows-latest'
-        shell: pwsh
+        shell: cmd
         run: |
           git clone --depth 1 --branch v2.1.0-beta3 https://github.com/LuaJIT/LuaJIT.git luajit
           cd luajit\src
-          .\msvcbuild.bat
-          Copy-Item .\lua51.dll $env:GITHUB_WORKSPACE\lua51.dll
-          Copy-Item .\lua51.lib $env:GITHUB_WORKSPACE\lua51.lib
+          msvcbuild.bat
+          copy /Y lua51.dll "%GITHUB_WORKSPACE%\lua51.dll"
+          copy /Y lua51.lib "%GITHUB_WORKSPACE%\lua51.lib"
 
       - name: Configure LuaJIT linking (Windows)
         if: matrix.os == 'windows-latest'
