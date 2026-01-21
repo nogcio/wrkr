@@ -13,6 +13,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.2] - 2026-01-21
+
+### Added
+- CI: nextest configuration and CI-profile test execution with JUnit output. ([dccf124](https://github.com/nogcio/wrkr/commit/dccf124b9b6d41b7307011f17fa2e604715678b0))
+
+### Changed
+- Docs: expanded maintainer/release guidance and issue/label conventions. ([72870c2](https://github.com/nogcio/wrkr/commit/72870c2bd3d2ca1f9dfad5a1c76512af3b2d0d31), [b9613dc](https://github.com/nogcio/wrkr/commit/b9613dc48633b23ce7680f890e2a92f4ae14e7d3))
+
+### Fixed
+- CI: publish JUnit test reports via `mikepenz/action-junit-report`. ([51d6d5f](https://github.com/nogcio/wrkr/commit/51d6d5f19ab69a52d5e7bb97b837f39d6ac6c315))
+- CI: allow reusable checks workflow to request `checks: write` and `pull-requests: read`. ([6a3798b](https://github.com/nogcio/wrkr/commit/6a3798bee00cf197b98391aeaf7e3af62dce40b9))
+- CI: use system LuaJIT and `protoc` where appropriate. ([1c1d9a8](https://github.com/nogcio/wrkr/commit/1c1d9a80b95ccb5204d9fe1d95c653b3a2609521))
+
 ## [0.0.1] - 2026-01-20
 
 ### Added
