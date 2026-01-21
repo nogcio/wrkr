@@ -47,13 +47,19 @@ jobs:
       - name: Run tests
         run: cargo nextest run --workspace --profile ci
 
-      - name: Report test results
-        if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
-        uses: dorny/test-reporter@v1
+      - name: Publish test report
+        if: always()
+        uses: mikepenz/action-junit-report@v5
         with:
-          name: Rust tests
-          path: target/nextest/ci/junit.xml
-          reporter: java-junit
+          report_paths: target/nextest/ci/junit.xml
+          check_name: Rust tests
+          job_summary: true
+          detailed_summary: false
+          include_time_in_summary: true
+          skip_success_summary: false
+          skip_annotations: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork }}
+          fail_on_parse_error: true
+          require_tests: false
 
       - name: Upload JUnit report
         if: always()
