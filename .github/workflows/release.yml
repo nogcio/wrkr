@@ -87,16 +87,42 @@ jobs:
         run: |
           $protoc = (Get-Command protoc.exe).Source
           if (-not $protoc) {
-            throw "protoc.exe not found after installing protobuf"
+            throw "protoc.exe not found after installing protoc"
           }
 
           Copy-Item $protoc $env:GITHUB_WORKSPACE\protoc.exe
 
-          $protocDir = Split-Path $protoc -Parent
-          $includeDir = Resolve-Path (Join-Path $protocDir "..\include") | Select-Object -ExpandProperty Path
-          $sentinel = Join-Path $includeDir "google\protobuf\any.proto"
-          if (-not (Test-Path $sentinel)) {
-            throw "Protobuf include dir not found next to protoc.exe (expected $sentinel)"
+          $sentinelRel = "google\protobuf\any.proto"
+          $includeCandidates = New-Object System.Collections.Generic.List[string]
+
+          # Default Chocolatey layout for `protoc` package.
+          if ($env:ChocolateyInstall) {
+            $includeCandidates.Add((Join-Path $env:ChocolateyInstall "lib\protoc\tools\include"))
+          }
+
+          # Fallback: scan chocolatey lib for protoc/protobuf packages.
+          if ($env:ChocolateyInstall) {
+            $libRoot = Join-Path $env:ChocolateyInstall "lib"
+            if (Test-Path $libRoot) {
+              $pkgs = Get-ChildItem -Path $libRoot -Directory -ErrorAction SilentlyContinue |
+                Where-Object { $_.Name -match '^(protoc|protobuf)(\.|$)' }
+              foreach ($pkg in $pkgs) {
+                $includeCandidates.Add((Join-Path $pkg.FullName "tools\include"))
+              }
+            }
+          }
+
+          $includeDir = $null
+          foreach ($candidate in $includeCandidates) {
+            $sentinel = Join-Path $candidate $sentinelRel
+            if (Test-Path $sentinel) {
+              $includeDir = (Resolve-Path $candidate).Path
+              break
+            }
+          }
+
+          if (-not $includeDir) {
+            throw "Protobuf include dir not found for protoc (expected to find '$sentinelRel' under Chocolatey package tools/include)"
           }
 
           if (Test-Path $env:GITHUB_WORKSPACE\protoc-include) {
