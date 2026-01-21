@@ -187,8 +187,18 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          "LUA_LIB_NAME=lua51" | Out-File -FilePath $env:GITHUB_ENV -Append
-          "LUA_LIB=$env:GITHUB_WORKSPACE" | Out-File -FilePath $env:GITHUB_ENV -Append
+          Add-Content -Path $env:GITHUB_ENV -Value "LUA_LIB_NAME=lua51" -Encoding utf8
+          Add-Content -Path $env:GITHUB_ENV -Value "LUA_LIB=$env:GITHUB_WORKSPACE" -Encoding utf8
+
+      - name: Verify LuaJIT artifacts (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          $dll = Join-Path $env:GITHUB_WORKSPACE "lua51.dll"
+          $lib = Join-Path $env:GITHUB_WORKSPACE "lua51.lib"
+
+          if (-not (Test-Path $dll)) { throw "Missing $dll" }
+          if (-not (Test-Path $lib)) { throw "Missing $lib" }
 
       - name: Upload wrkr binary to GitHub Release (non-Windows)
         if: matrix.os != 'windows-latest'
