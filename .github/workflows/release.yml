@@ -145,12 +145,33 @@ jobs:
         with:
           arch: x64
 
-      - name: Use rust-lld linker (Windows)
+      - name: Use MSVC linker (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          $rustLld = (Get-Command rust-lld.exe -ErrorAction Stop).Source
-          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$rustLld" | Out-File -FilePath $env:GITHUB_ENV -Append
+          $candidates = New-Object System.Collections.Generic.List[string]
+
+          if ($env:VCToolsInstallDir) {
+            $candidates.Add((Join-Path $env:VCToolsInstallDir "bin\Hostx64\x64\link.exe"))
+          }
+
+          $cmdCandidates = @(Get-Command link.exe -All -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)
+          foreach ($c in $cmdCandidates) { $candidates.Add($c) }
+
+          $msvcLink = $null
+          foreach ($c in $candidates) {
+            if (-not $c) { continue }
+            if (-not (Test-Path $c)) { continue }
+            if ($c -match '\\Git\\usr\\bin\\link\.exe$') { continue }
+            $msvcLink = $c
+            break
+          }
+
+          if (-not $msvcLink) {
+            throw "MSVC link.exe not found (only Git link.exe was visible on PATH)."
+          }
+
+          "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$msvcLink" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build LuaJIT (Windows)
         if: matrix.os == 'windows-latest'
