@@ -27,7 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - CI: use system LuaJIT and `protoc` where appropriate. ([1c1d9a8](https://github.com/nogcio/wrkr/commit/1c1d9a80b95ccb5204d9fe1d95c653b3a2609521))
 - CI: fix Windows `protoc` include discovery for bundling. ([d763754](https://github.com/nogcio/wrkr/commit/d763754e8764909b0fcf8b92e9e36ae12d211755))
 - CI: fix Windows LuaJIT build by initializing MSVC environment. ([7575a72](https://github.com/nogcio/wrkr/commit/7575a7297cdf0b075f333f1cb38c5b5e0c399e5e))
-- CI: fix Windows linking by forcing `rust-lld` instead of Git `link.exe`. ([56c8d2f](https://github.com/nogcio/wrkr/commit/56c8d2fe9a4b0fe06bab8dca22b353aee6887ac1))
+- CI: fix Windows linking by selecting MSVC `link.exe` (avoid Git `link.exe`). ([a014435](https://github.com/nogcio/wrkr/commit/a01443553e7c872c03a9c6c90669a66a5073c734))
 
 ## [0.0.1] - 2026-01-20
 
