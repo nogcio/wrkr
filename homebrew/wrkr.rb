@@ -1,17 +1,16 @@
 class Wrkr < Formula
   desc "Fast, scriptable load testing tool"
   homepage "https://github.com/nogcio/wrkr"
-  version "v0.0.1"
-
+  version "v0.0.2"
   on_macos do
     on_arm do
       url "https://github.com/nogcio/wrkr/releases/download/#{version}/wrkr-#{version}-aarch64-apple-darwin.tar.gz"
-      sha256 "5c37eeee68b5651166cb49d754683ef6d1941b1ca9bcc7bfa920b9f5e9ddac04"
+      sha256 "265b880a5d0b58fcfe5a7c1af24c12777d4fd3fd91766d581be98efd21a2a243"
     end
 
     on_intel do
       url "https://github.com/nogcio/wrkr/releases/download/#{version}/wrkr-#{version}-x86_64-apple-darwin.tar.gz"
-      sha256 "dcf66476d0571be9c95489aa0127d6d6ddf2c4a1ba2ff1d7ed5e6f51e4fd90ea"
+      sha256 "29b2d8200d8faabbb1b7ddc51a7cfddedc820c551544f2901430a4853788fe82"
     end
   end
 
