@@ -12,6 +12,10 @@ permissions:
 jobs:
   checks:
     uses: ./.github/workflows/_checks.yml
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
 
   create-release:
     name: Create GitHub Release

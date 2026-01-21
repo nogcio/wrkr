@@ -20,6 +20,10 @@ env:
 jobs:
   checks:
     uses: ./.github/workflows/_checks.yml
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: read
 
   build:
     needs: checks
