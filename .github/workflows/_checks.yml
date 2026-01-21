@@ -45,14 +45,14 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Run tests
-        run: cargo nextest run --workspace --junit-path target/nextest/junit.xml
+        run: cargo nextest run --workspace --profile ci
 
       - name: Report test results
         if: always() && (github.event_name != 'pull_request' || !github.event.pull_request.head.repo.fork)
         uses: dorny/test-reporter@v1
         with:
           name: Rust tests
-          path: target/nextest/junit.xml
+          path: target/nextest/ci/junit.xml
           reporter: java-junit
 
       - name: Upload JUnit report
@@ -60,7 +60,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: junit-test-results
-          path: target/nextest/junit.xml
+          path: target/nextest/ci/junit.xml
+          if-no-files-found: warn
 
       - name: Build workspace
         run: cargo build --workspace --verbose

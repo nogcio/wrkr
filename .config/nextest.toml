@@ -1,0 +1,4 @@
+[profile.ci]
+
+[profile.ci.junit]
+path = "junit.xml"
