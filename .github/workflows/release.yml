@@ -179,7 +179,9 @@ jobs:
         run: |
           git clone --depth 1 --branch v2.1.0-beta3 https://github.com/LuaJIT/LuaJIT.git luajit
           cd luajit\src
-          msvcbuild.bat
+          call msvcbuild.bat
+          if not exist lua51.dll exit /b 1
+          if not exist lua51.lib exit /b 1
           copy /Y lua51.dll "%GITHUB_WORKSPACE%\lua51.dll"
           copy /Y lua51.lib "%GITHUB_WORKSPACE%\lua51.lib"
 
