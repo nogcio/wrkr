@@ -79,7 +79,7 @@ jobs:
       - name: Install protoc (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        run: choco install protobuf -y
+        run: choco install protoc -y
 
       - name: Bundle protoc (Windows)
         if: matrix.os == 'windows-latest'
