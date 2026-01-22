@@ -1,5 +1,6 @@
 use hdrhistogram::Histogram;
 use std::collections::HashMap;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -91,6 +92,7 @@ pub struct RunSummary {
 
 #[derive(Debug)]
 pub struct RunStats {
+    run_id: u64,
     requests_total: AtomicU64,
     http_requests_total: AtomicU64,
     grpc_requests_total: AtomicU64,
@@ -126,8 +128,11 @@ pub struct RunStats {
     // Hot-path optimization: avoid per-request MetricsRegistry::series lock/tag normalization
     // when the caller does not provide extra tags. This keeps full tagged metric output
     // (method/name/status) but only builds/tag-normalizes those series once per run.
-    grpc_tagged_series_cache: Mutex<Vec<(GrpcTaggedSeriesKey, GrpcTaggedSeries)>>,
+    // Bucketed by a fast hash of (method,status,name) to avoid O(n) scans.
+    grpc_tagged_series_cache: Mutex<HashMap<u64, Vec<(GrpcTaggedSeriesKey, GrpcTaggedSeries)>>>,
 }
+
+static RUN_ID_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Debug)]
 struct LatencyHists {
@@ -241,6 +246,7 @@ impl Default for RunStats {
         let metric_iteration_duration = metrics.handle(MetricKind::Trend, "iteration_duration");
 
         Self {
+            run_id: RUN_ID_COUNTER.fetch_add(1, Ordering::Relaxed),
             requests_total: AtomicU64::new(0),
             http_requests_total: AtomicU64::new(0),
             grpc_requests_total: AtomicU64::new(0),
@@ -276,12 +282,16 @@ impl Default for RunStats {
             metric_iterations,
             metric_iteration_duration,
 
-            grpc_tagged_series_cache: Mutex::new(Vec::new()),
+            grpc_tagged_series_cache: Mutex::new(HashMap::new()),
         }
     }
 }
 
 impl RunStats {
+    pub fn run_id(&self) -> u64 {
+        self.run_id
+    }
+
     pub fn metric_handle(&self, kind: MetricKind, name: &str) -> MetricHandle {
         self.metrics.handle(kind, name)
     }
@@ -550,7 +560,9 @@ impl RunStats {
                     .lock()
                     .unwrap_or_else(|p| p.into_inner());
 
-                if let Some((_, v)) = cache.iter().find(|(k, _)| {
+                let h = Self::grpc_tag_hash(req.method, req.status, req.name);
+                let bucket = cache.entry(h).or_default();
+                if let Some((_, v)) = bucket.iter().find(|(k, _)| {
                     k.status == req.status && k.method == req.method && k.name.as_ref() == req.name
                 }) {
                     v.clone()
@@ -584,7 +596,7 @@ impl RunStats {
                         duration,
                         failed: failed_m,
                     };
-                    cache.push((key, v.clone()));
+                    bucket.push((key, v.clone()));
                     v
                 }
             };
@@ -608,6 +620,12 @@ impl RunStats {
             self.metric_grpc_req_failed
                 .add_bool_with_tags(failed, &merged_tags);
         }
+    }
+
+    fn grpc_tag_hash(method: GrpcCallKind, status: Option<u16>, name: &str) -> u64 {
+        let mut hasher = ahash::AHasher::default();
+        (method, status, name).hash(&mut hasher);
+        hasher.finish()
     }
 
     pub fn check_handle(&self, name: &str) -> CheckHandle {

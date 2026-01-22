@@ -4,7 +4,6 @@ use prost::Message as _;
 #[derive(Debug)]
 pub(super) struct DecodedDynamicMessage {
     pub(super) msg: prost_reflect::DynamicMessage,
-    pub(super) bytes_received: u64,
 }
 
 #[derive(Clone)]
@@ -70,14 +69,9 @@ impl tonic::codec::Decoder for DynamicMessageDecoder {
             return Ok(None);
         }
 
-        let before = src.remaining();
         let msg = prost_reflect::DynamicMessage::decode(self.desc.clone(), &mut *src)
             .map_err(|e| tonic::Status::internal(e.to_string()))?;
 
-        let consumed = before.saturating_sub(src.remaining());
-        Ok(Some(DecodedDynamicMessage {
-            msg,
-            bytes_received: consumed as u64,
-        }))
+        Ok(Some(DecodedDynamicMessage { msg }))
     }
 }

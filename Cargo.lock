@@ -2274,6 +2274,7 @@ dependencies = [
 name = "wrkr-core"
 version = "0.0.2"
 dependencies = [
+ "ahash",
  "bytes",
  "hdrhistogram",
  "http",

@@ -108,12 +108,46 @@ pub fn create_grpc_module(
         let script_path = script_path.clone();
         lua.create_function(move |lua, opts: Option<Table>| {
             let mut pool_size = grpc_shared::default_pool_size(max_vus);
-            if let Some(opts) = opts {
-                pool_size = opts
-                    .get::<u64>("pool_size")
-                    .ok()
-                    .map(|n| n as usize)
-                    .unwrap_or(pool_size);
+            if let Some(opts) = opts
+                && let Some(pool_val) = opts.get::<Option<Value>>("pool_size")?
+            {
+                let raw_value: i64 = match pool_val {
+                    Value::Integer(i) => i,
+                    Value::Number(n) => {
+                        if !n.is_finite() || n.fract() != 0.0 {
+                            return Err(mlua::Error::external(
+                                "grpc.Client.new: pool_size must be a finite integer",
+                            ));
+                        }
+                        n as i64
+                    }
+                    _ => {
+                        return Err(mlua::Error::external(
+                            "grpc.Client.new: pool_size must be a number",
+                        ));
+                    }
+                };
+
+                if raw_value <= 0 {
+                    return Err(mlua::Error::external(
+                        "grpc.Client.new: pool_size must be a positive integer",
+                    ));
+                }
+
+                let requested: usize = usize::try_from(raw_value).map_err(|_| {
+                    mlua::Error::external(
+                        "grpc.Client.new: pool_size is too large for this platform",
+                    )
+                })?;
+
+                let max_pool = (max_vus as usize).clamp(1, 1024);
+                if requested > max_pool {
+                    return Err(mlua::Error::external(format!(
+                        "grpc.Client.new: pool_size must be between 1 and {max_pool}",
+                    )));
+                }
+
+                pool_size = requested;
             }
 
             let shared = grpc_shared::get_or_create(&stats, pool_size);
