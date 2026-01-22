@@ -113,7 +113,7 @@ impl GrpcClient {
         }
 
         let i = self.rr.fetch_add(1, Ordering::Relaxed);
-        // Safety: connect_pooled ensures at least 1 channel.
+        // Invariant: connect_pooled ensures at least 1 channel.
         let channel = self.channels[i % self.channels.len()].clone();
         let mut grpc = tonic::client::Grpc::new(channel);
         let codec = DynamicMessageCodec::new(method.output_desc().clone());
@@ -132,7 +132,8 @@ impl GrpcClient {
                 let headers = metadata_to_pairs(res.metadata());
                 let decoded = res.into_inner();
                 let msg = decoded.msg;
-                let bytes_received = decoded.bytes_received;
+                // Note: this is application-message bytes (encoded protobuf), not transport bytes.
+                let bytes_received = msg.encoded_len() as u64;
 
                 let response = dynamic_message_to_value_for_method(method, &msg);
 

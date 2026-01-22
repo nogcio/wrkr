@@ -165,7 +165,7 @@ impl SharedGrpcClient {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct RegistryKey {
-    run_id: usize,
+    run_id: u64,
     pool_size: usize,
 }
 
@@ -173,10 +173,9 @@ static SHARED: OnceLock<Mutex<HashMap<RegistryKey, Arc<SharedGrpcClient>>>> = On
 
 pub(crate) fn default_pool_size(max_vus: u64) -> usize {
     let vus = max_vus as usize;
-    // Keep a modest number of HTTP/2 connections by default, but scale up under
-    // high VU counts to reduce internal h2 client contention.
-    //
-    // Target ~8 VUs per channel, but cap so we don't explode connection count.
+    // Aim for roughly 8 VUs per channel, but clamp the pool size between 16 and 64
+    // connections so we keep a reasonable lower bound for low VU counts and never
+    // explode connection count for very high VU counts.
     (vus / 8).clamp(16, 64).max(1)
 }
 
@@ -185,7 +184,7 @@ pub(crate) fn get_or_create(
     pool_size: usize,
 ) -> Arc<SharedGrpcClient> {
     let key = RegistryKey {
-        run_id: Arc::as_ptr(stats) as usize,
+        run_id: stats.run_id(),
         pool_size: pool_size.max(1),
     };
 

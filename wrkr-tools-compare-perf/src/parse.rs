@@ -1,6 +1,8 @@
 use crate::types::{Rps, RunResult};
 use anyhow::{Context, Result, bail};
 
+const DIAG_MAX_CHARS: usize = 4096;
+
 pub(crate) fn parse_wrk_rps(stdout: &str) -> Result<Rps> {
     for line in stdout.lines() {
         let line = line.trim();
@@ -66,8 +68,8 @@ fn parse_wrkr_rps_text(text: &str) -> Result<Rps> {
 }
 
 fn wrkr_parse_diag(res: &RunResult) -> String {
-    let out = truncate(&tail_lines(&res.stdout, 12), 1200);
-    let err = truncate(&tail_lines(&res.stderr, 12), 1200);
+    let out = truncate(&tail_lines(&res.stdout, 12), DIAG_MAX_CHARS);
+    let err = truncate(&tail_lines(&res.stderr, 12), DIAG_MAX_CHARS);
     format!(
         "failed to parse wrkr RPS\n--- wrkr stdout (tail) ---\n{out}\n--- wrkr stderr (tail) ---\n{err}"
     )
@@ -207,8 +209,8 @@ fn parse_k6_completed_iterations(line: &str) -> Option<u64> {
 }
 
 fn k6_parse_diag(kind: &str, res: &RunResult) -> String {
-    let out = truncate(&tail_lines(&res.stdout, 12), 1200);
-    let err = truncate(&tail_lines(&res.stderr, 12), 1200);
+    let out = truncate(&tail_lines(&res.stdout, 12), DIAG_MAX_CHARS);
+    let err = truncate(&tail_lines(&res.stderr, 12), DIAG_MAX_CHARS);
     format!(
         "failed to parse k6 {kind} RPS\n--- k6 stdout (tail) ---\n{out}\n--- k6 stderr (tail) ---\n{err}"
     )

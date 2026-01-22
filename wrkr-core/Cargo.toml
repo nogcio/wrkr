@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bytes = "1"
+ahash = "0.8"
 hdrhistogram = "7"
 http = "1"
 http-body-util = "0.1"
