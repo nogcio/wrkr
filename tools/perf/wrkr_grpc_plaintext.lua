@@ -15,31 +15,28 @@ if not ok then
   client:load({ "protos" }, "protos/echo.proto")
 end
 
+
+local req = { message = "ping" }
+local invoke_opts = { name = "Echo" }
+local checks = {
+  ["ok"] = function(r)
+    return r.ok == true
+  end,
+  ["echo"] = function(r)
+    return r.response ~= nil and r.response.message == "ping"
+  end,
+}
+
 local connected = false
 
 function Default()
   if not connected then
-    local ok, err = client:connect(target, { timeout = "2s" })
-    if not ok then
-      error(err)
+    local connect_ok, err = client:connect(target, { timeout = "3s" })
+    if not connect_ok then
+      error("gRPC connect failed: " .. tostring(err))
     end
     connected = true
   end
-
-  local res = client:invoke(
-    "wrkr.test.EchoService/Echo",
-    { message = "ping" },
-    {
-      name = "Echo",
-    }
-  )
-
-  check(res, {
-    ["ok"] = function(r)
-      return r.ok == true
-    end,
-    ["echo"] = function(r)
-      return r.response.message == "ping"
-    end,
-  })
+  local res = client:invoke("wrkr.test.EchoService/Echo", req, invoke_opts)
+  check(res, checks)
 end

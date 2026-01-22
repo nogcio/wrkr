@@ -383,7 +383,7 @@ impl Metric {
         }
     }
 
-    fn add(&self, value: f64) {
+    pub(crate) fn add(&self, value: f64) {
         match self.kind {
             MetricKind::Trend => {
                 if let Some(t) = &self.trend {
@@ -406,7 +406,7 @@ impl Metric {
         }
     }
 
-    fn add_bool(&self, value: bool) {
+    pub(crate) fn add_bool(&self, value: bool) {
         if self.kind != MetricKind::Rate {
             return;
         }

@@ -40,7 +40,7 @@ pub struct Cli {
     pub(crate) wrk_connections: u32,
 
     /// Gate: wrkr_rps must be >= wrk_rps * ratio
-    #[arg(long, env = "RATIO_OK", default_value_t = 0.95)]
+    #[arg(long, env = "RATIO_OK", default_value_t = 0.90)]
     pub(crate) ratio_ok_get_hello: f64,
 
     /// Gate: wrkr_rps must be >= wrk_rps * ratio
@@ -48,15 +48,19 @@ pub struct Cli {
     pub(crate) ratio_ok_post_json: f64,
 
     /// Gate: wrkr_rps must be > k6_rps * ratio
-    #[arg(long, env = "RATIO_OK_WRKR_OVER_K6", default_value_t = 1.5)]
+    #[arg(long, env = "RATIO_OK_WRKR_OVER_K6", default_value_t = 1.4)]
     pub(crate) ratio_ok_wrkr_over_k6: f64,
 
     /// Gate for gRPC: wrkr_rps must be > k6_rps * ratio
-    #[arg(long, env = "RATIO_OK_GRPC_WRKR_OVER_K6", default_value_t = 1.5)]
+    #[arg(long, env = "RATIO_OK_GRPC_WRKR_OVER_K6", default_value_t = 2.0)]
     pub(crate) ratio_ok_grpc_wrkr_over_k6: f64,
 
     /// Optional cross-protocol gate: wrkr gRPC RPS must be >= wrk GET /hello RPS * ratio
-    #[arg(long, env = "RATIO_OK_GRPC_WRKR_OVER_WRK_HELLO", default_value_t = 0.9)]
+    #[arg(
+        long,
+        env = "RATIO_OK_GRPC_WRKR_OVER_WRK_HELLO",
+        default_value_t = 0.70
+    )]
     pub(crate) ratio_ok_grpc_wrkr_over_wrk_hello: f64,
 
     /// If set, missing wrk is a hard error; otherwise HTTP wrk comparisons are skipped

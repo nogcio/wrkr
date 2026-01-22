@@ -65,6 +65,7 @@ mod debugger;
 mod editor_stubs;
 mod group_api;
 mod grpc_api;
+mod grpc_shared;
 mod http_api;
 mod json_util;
 mod lifecycle;
