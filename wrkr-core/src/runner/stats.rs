@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+use super::metrics::Metric;
 use super::metrics::{MetricHandle, MetricKind, MetricSeriesSummary, MetricsRegistry};
 
 #[derive(Debug, Default)]
@@ -105,8 +106,7 @@ pub struct RunStats {
     status_5xx: AtomicU64,
     bytes_received_total: AtomicU64,
     bytes_sent_total: AtomicU64,
-    latency_us: Mutex<Histogram<u64>>,
-    latency_us_window: Mutex<Histogram<u64>>,
+    latency: Mutex<LatencyHists>,
 
     rps_samples: Mutex<RpsAgg>,
 
@@ -122,6 +122,31 @@ pub struct RunStats {
     metric_data_sent: MetricHandle,
     metric_iterations: MetricHandle,
     metric_iteration_duration: MetricHandle,
+
+    // Hot-path optimization: avoid per-request MetricsRegistry::series lock/tag normalization
+    // when the caller does not provide extra tags. This keeps full tagged metric output
+    // (method/name/status) but only builds/tag-normalizes those series once per run.
+    grpc_tagged_series_cache: Mutex<Vec<(GrpcTaggedSeriesKey, GrpcTaggedSeries)>>,
+}
+
+#[derive(Debug)]
+struct LatencyHists {
+    all_us: Histogram<u64>,
+    window_us: Histogram<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct GrpcTaggedSeriesKey {
+    method: GrpcCallKind,
+    name: Arc<str>,
+    status: Option<u16>,
+}
+
+#[derive(Debug, Clone)]
+struct GrpcTaggedSeries {
+    reqs: Arc<Metric>,
+    duration: Arc<Metric>,
+    failed: Arc<Metric>,
 }
 
 #[derive(Debug, Clone)]
@@ -231,8 +256,10 @@ impl Default for RunStats {
             status_5xx: AtomicU64::new(0),
             bytes_received_total: AtomicU64::new(0),
             bytes_sent_total: AtomicU64::new(0),
-            latency_us: Mutex::new(new_hist()),
-            latency_us_window: Mutex::new(new_hist()),
+            latency: Mutex::new(LatencyHists {
+                all_us: new_hist(),
+                window_us: new_hist(),
+            }),
 
             rps_samples: Mutex::new(RpsAgg::default()),
 
@@ -248,6 +275,8 @@ impl Default for RunStats {
             metric_data_sent,
             metric_iterations,
             metric_iteration_duration,
+
+            grpc_tagged_series_cache: Mutex::new(Vec::new()),
         }
     }
 }
@@ -291,28 +320,28 @@ impl RunStats {
 
     pub fn latency_snapshot_ms(&self) -> LatencySnapshotMs {
         let h = self
-            .latency_us
+            .latency
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         #[allow(clippy::len_zero)]
-        if h.len() == 0 {
+        if h.all_us.len() == 0 {
             return LatencySnapshotMs::default();
         }
 
-        let p50_ms = h.value_at_quantile(0.50) / 1000;
-        let p75_ms = h.value_at_quantile(0.75) / 1000;
-        let p90_ms = h.value_at_quantile(0.90) / 1000;
-        let p99_ms = h.value_at_quantile(0.99) / 1000;
+        let p50_ms = h.all_us.value_at_quantile(0.50) / 1000;
+        let p75_ms = h.all_us.value_at_quantile(0.75) / 1000;
+        let p90_ms = h.all_us.value_at_quantile(0.90) / 1000;
+        let p99_ms = h.all_us.value_at_quantile(0.99) / 1000;
 
-        let mean_ms = h.mean() / 1000.0;
-        let stdev_ms = h.stdev() / 1000.0;
-        let max_ms = h.max() / 1000;
+        let mean_ms = h.all_us.mean() / 1000.0;
+        let stdev_ms = h.all_us.stdev() / 1000.0;
+        let max_ms = h.all_us.max() / 1000;
 
         let mut dist: Vec<(u8, u64)> = Vec::with_capacity(99);
         for p in 1u8..=99u8 {
             let q = (p as f64) / 100.0;
-            let v_ms = h.value_at_quantile(q) / 1000;
+            let v_ms = h.all_us.value_at_quantile(q) / 1000;
             dist.push((p, v_ms));
         }
 
@@ -506,21 +535,79 @@ impl RunStats {
 
         let duration_ms = req.elapsed.as_secs_f64() * 1000.0;
 
-        let mut merged_tags: Vec<(String, String)> = Vec::with_capacity(tags.len() + 3);
-        merged_tags.extend_from_slice(tags);
-        merged_tags.push(("method".to_string(), req.method.to_string()));
-        merged_tags.push(("name".to_string(), req.name.to_string()));
-        if let Some(status) = req.status {
-            merged_tags.push(("status".to_string(), status.to_string()));
-        }
-
-        self.metric_grpc_reqs.add_with_tags(1.0, &merged_tags);
-        self.metric_grpc_req_duration
-            .add_with_tags(duration_ms, &merged_tags);
-
         let failed = transport_error || req.status.is_some_and(|s| s != 0);
-        self.metric_grpc_req_failed
-            .add_bool_with_tags(failed, &merged_tags);
+
+        // Tagged metrics.
+        if tags.is_empty() {
+            // Base series.
+            self.metric_grpc_reqs.add(1.0);
+            self.metric_grpc_req_duration.add(duration_ms);
+            self.metric_grpc_req_failed.add_bool(failed);
+
+            let series = {
+                let mut cache = self
+                    .grpc_tagged_series_cache
+                    .lock()
+                    .unwrap_or_else(|p| p.into_inner());
+
+                if let Some((_, v)) = cache.iter().find(|(k, _)| {
+                    k.status == req.status && k.method == req.method && k.name.as_ref() == req.name
+                }) {
+                    v.clone()
+                } else {
+                    let key = GrpcTaggedSeriesKey {
+                        method: req.method,
+                        name: Arc::from(req.name),
+                        status: req.status,
+                    };
+
+                    // Build the merged tags once for this (method,name,status) tuple.
+                    let mut merged_tags: Vec<(String, String)> = Vec::with_capacity(3);
+                    merged_tags.push(("method".to_string(), key.method.to_string()));
+                    merged_tags.push(("name".to_string(), key.name.to_string()));
+                    if let Some(status) = key.status {
+                        merged_tags.push(("status".to_string(), status.to_string()));
+                    }
+
+                    let reqs = self
+                        .metrics
+                        .series(MetricKind::Counter, "grpc_reqs", &merged_tags);
+                    let duration =
+                        self.metrics
+                            .series(MetricKind::Trend, "grpc_req_duration", &merged_tags);
+                    let failed_m =
+                        self.metrics
+                            .series(MetricKind::Rate, "grpc_req_failed", &merged_tags);
+
+                    let v = GrpcTaggedSeries {
+                        reqs,
+                        duration,
+                        failed: failed_m,
+                    };
+                    cache.push((key, v.clone()));
+                    v
+                }
+            };
+
+            series.reqs.add(1.0);
+            series.duration.add(duration_ms);
+            series.failed.add_bool(failed);
+        } else {
+            let mut merged_tags: Vec<(String, String)> = Vec::with_capacity(tags.len() + 3);
+            merged_tags.extend_from_slice(tags);
+            merged_tags.push(("method".to_string(), req.method.to_string()));
+            merged_tags.push(("name".to_string(), req.name.to_string()));
+            if let Some(status) = req.status {
+                merged_tags.push(("status".to_string(), status.to_string()));
+            }
+
+            // Preserve existing tag behavior for non-empty extra tags.
+            self.metric_grpc_reqs.add_with_tags(1.0, &merged_tags);
+            self.metric_grpc_req_duration
+                .add_with_tags(duration_ms, &merged_tags);
+            self.metric_grpc_req_failed
+                .add_bool_with_tags(failed, &merged_tags);
+        }
     }
 
     pub fn check_handle(&self, name: &str) -> CheckHandle {
@@ -564,39 +651,30 @@ impl RunStats {
 
         let value = us as u64;
 
-        {
-            let mut h = self
-                .latency_us
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let _ = h.record(value);
-        }
-
-        {
-            let mut h = self
-                .latency_us_window
-                .lock()
-                .unwrap_or_else(|poisoned| poisoned.into_inner());
-            let _ = h.record(value);
-        }
+        let mut h = self
+            .latency
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let _ = h.all_us.record(value);
+        let _ = h.window_us.record(value);
     }
 
     pub fn take_latency_window_ms(&self) -> (Option<f64>, Option<f64>) {
         let mut h = self
-            .latency_us_window
+            .latency
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
 
         #[allow(clippy::len_zero)]
-        let out = if h.len() == 0 {
+        let out = if h.window_us.len() == 0 {
             (None, None)
         } else {
-            let p50 = h.value_at_quantile(0.50) as f64 / 1000.0;
-            let p95 = h.value_at_quantile(0.95) as f64 / 1000.0;
+            let p50 = h.window_us.value_at_quantile(0.50) as f64 / 1000.0;
+            let p95 = h.window_us.value_at_quantile(0.95) as f64 / 1000.0;
             (Some(p50), Some(p95))
         };
 
-        h.reset();
+        h.window_us.reset();
         out
     }
 
@@ -632,27 +710,27 @@ impl RunStats {
 
         let (p50_ms, p75_ms, p90_ms, p95_ms, p99_ms, mean_ms, stdev_ms, max_ms, dist_ms) = {
             let h = self
-                .latency_us
+                .latency
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner());
             #[allow(clippy::len_zero)]
-            if h.len() == 0 {
+            if h.all_us.len() == 0 {
                 (None, None, None, None, None, None, None, None, Vec::new())
             } else {
-                let p50 = h.value_at_quantile(0.50) as f64 / 1000.0;
-                let p75 = h.value_at_quantile(0.75) as f64 / 1000.0;
-                let p90 = h.value_at_quantile(0.90) as f64 / 1000.0;
-                let p95 = h.value_at_quantile(0.95) as f64 / 1000.0;
-                let p99 = h.value_at_quantile(0.99) as f64 / 1000.0;
+                let p50 = h.all_us.value_at_quantile(0.50) as f64 / 1000.0;
+                let p75 = h.all_us.value_at_quantile(0.75) as f64 / 1000.0;
+                let p90 = h.all_us.value_at_quantile(0.90) as f64 / 1000.0;
+                let p95 = h.all_us.value_at_quantile(0.95) as f64 / 1000.0;
+                let p99 = h.all_us.value_at_quantile(0.99) as f64 / 1000.0;
 
-                let mean = h.mean() / 1000.0;
-                let stdev = h.stdev() / 1000.0;
-                let max = h.max() / 1000;
+                let mean = h.all_us.mean() / 1000.0;
+                let stdev = h.all_us.stdev() / 1000.0;
+                let max = h.all_us.max() / 1000;
 
                 let mut dist: Vec<(u8, u64)> = Vec::with_capacity(99);
                 for p in 1u8..=99u8 {
                     let q = (p as f64) / 100.0;
-                    let v_ms = h.value_at_quantile(q) / 1000;
+                    let v_ms = h.all_us.value_at_quantile(q) / 1000;
                     dist.push((p, v_ms));
                 }
 

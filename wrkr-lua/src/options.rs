@@ -18,7 +18,18 @@ pub fn parse_script_options(
     // Parse `options`/`options.scenarios` using a dedicated Lua state (no globals needed).
     let lua = Lua::new();
     configure_module_path(&lua, script_path)?;
-    modules::register(&lua, script_path, env_vars, 0, client, stats, shared)?;
+    modules::register(
+        &lua,
+        modules::RegisterContext {
+            script_path,
+            env_vars,
+            vu_id: 0,
+            max_vus: 1,
+            client,
+            stats,
+            shared,
+        },
+    )?;
     let chunk_name = chunk_name(script_path);
     lua.load(script).set_name(&chunk_name).exec()?;
 

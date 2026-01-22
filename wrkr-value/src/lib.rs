@@ -1,7 +1,9 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use bytes::Bytes;
+
+pub type ObjectMap = ahash::AHashMap<Arc<str>, Value>;
+pub type MapMap = ahash::AHashMap<MapKey, Value>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MapKey {
@@ -21,8 +23,8 @@ pub enum Value {
     String(Arc<str>),
     Bytes(Bytes),
     Array(Vec<Value>),
-    Object(HashMap<Arc<str>, Value>),
-    Map(HashMap<MapKey, Value>),
+    Object(ObjectMap),
+    Map(MapMap),
 }
 
 impl Value {

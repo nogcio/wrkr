@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 bytes = "1"
+ahash = "0.8"
 
 [lints]
 workspace = true

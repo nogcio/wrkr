@@ -31,7 +31,7 @@ pub struct UnaryResult {
     pub error: Option<String>,
     pub transport_error_kind: Option<GrpcTransportErrorKind>,
 
-    pub response: Option<wrkr_value::Value>,
+    pub response: wrkr_value::Value,
     pub headers: Vec<(String, String)>,
     pub trailers: Vec<(String, String)>,
 

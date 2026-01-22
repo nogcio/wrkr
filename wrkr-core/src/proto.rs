@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use prost::Message as _;
 use prost_reflect::DescriptorPool;
+use tonic::codegen::http::uri::PathAndQuery;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -25,6 +28,9 @@ pub enum Error {
     #[error("invalid full method name (expected 'pkg.Service/Method'): {0}")]
     InvalidFullMethod(String),
 
+    #[error("invalid protobuf descriptor: {0}")]
+    InvalidDescriptor(String),
+
     #[error("service not found in descriptors: {0}")]
     ServiceNotFound(String),
 
@@ -38,13 +44,59 @@ pub struct ProtoSchema {
 }
 
 #[derive(Debug, Clone)]
+pub(crate) enum GrpcFieldShape {
+    Scalar {
+        kind: prost_reflect::Kind,
+    },
+    List {
+        kind: prost_reflect::Kind,
+    },
+    Map {
+        key_kind: prost_reflect::Kind,
+        value_kind: prost_reflect::Kind,
+    },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GrpcInputFieldMeta {
+    pub(crate) field: prost_reflect::FieldDescriptor,
+    pub(crate) shape: GrpcFieldShape,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct GrpcOutputFieldMeta {
+    pub(crate) field: prost_reflect::FieldDescriptor,
+    pub(crate) name: Arc<str>,
+}
+
+#[derive(Debug, Clone)]
 pub struct GrpcMethod {
-    method: prost_reflect::MethodDescriptor,
+    path: PathAndQuery,
+    input: prost_reflect::MessageDescriptor,
+    input_fields: HashMap<Arc<str>, GrpcInputFieldMeta>,
+    output: prost_reflect::MessageDescriptor,
+    output_fields: Vec<GrpcOutputFieldMeta>,
 }
 
 impl GrpcMethod {
-    pub(crate) fn descriptor(&self) -> &prost_reflect::MethodDescriptor {
-        &self.method
+    pub(crate) fn path(&self) -> &PathAndQuery {
+        &self.path
+    }
+
+    pub(crate) fn input_desc(&self) -> &prost_reflect::MessageDescriptor {
+        &self.input
+    }
+
+    pub(crate) fn input_fields(&self) -> &HashMap<Arc<str>, GrpcInputFieldMeta> {
+        &self.input_fields
+    }
+
+    pub(crate) fn output_desc(&self) -> &prost_reflect::MessageDescriptor {
+        &self.output
+    }
+
+    pub(crate) fn output_fields(&self) -> &[GrpcOutputFieldMeta] {
+        self.output_fields.as_slice()
     }
 }
 
@@ -185,6 +237,73 @@ impl ProtoSchema {
                 method: method_name.to_string(),
             })?;
 
-        Ok(GrpcMethod { method })
+        let path = PathAndQuery::from_maybe_shared(bytes::Bytes::from(format!(
+            "/{service_name}/{method_name}"
+        )))
+        .map_err(|_| Error::InvalidFullMethod(full_method.to_string()))?;
+
+        fn build_shape(field: &prost_reflect::FieldDescriptor) -> Result<GrpcFieldShape> {
+            if field.is_map() {
+                let prost_reflect::Kind::Message(entry_desc) = field.kind() else {
+                    return Err(Error::InvalidDescriptor(
+                        "map field did not have message kind".to_string(),
+                    ));
+                };
+
+                let key_kind = entry_desc
+                    .get_field_by_name("key")
+                    .ok_or_else(|| {
+                        Error::InvalidDescriptor("invalid map entry: missing key".to_string())
+                    })?
+                    .kind();
+                let value_kind = entry_desc
+                    .get_field_by_name("value")
+                    .ok_or_else(|| {
+                        Error::InvalidDescriptor("invalid map entry: missing value".to_string())
+                    })?
+                    .kind();
+
+                return Ok(GrpcFieldShape::Map {
+                    key_kind,
+                    value_kind,
+                });
+            }
+
+            let kind = field.kind();
+            if field.is_list() {
+                Ok(GrpcFieldShape::List { kind })
+            } else {
+                Ok(GrpcFieldShape::Scalar { kind })
+            }
+        }
+
+        let input = method.input();
+        let mut input_fields: HashMap<Arc<str>, GrpcInputFieldMeta> =
+            HashMap::with_capacity(input.fields().len());
+        for f in input.fields() {
+            let name = Arc::<str>::from(f.name());
+            input_fields.insert(
+                name,
+                GrpcInputFieldMeta {
+                    shape: build_shape(&f)?,
+                    field: f,
+                },
+            );
+        }
+
+        let output = method.output();
+        let mut output_fields: Vec<GrpcOutputFieldMeta> = Vec::with_capacity(output.fields().len());
+        for f in output.fields() {
+            let name = Arc::<str>::from(f.name());
+            output_fields.push(GrpcOutputFieldMeta { field: f, name });
+        }
+
+        Ok(GrpcMethod {
+            input,
+            input_fields,
+            output,
+            output_fields,
+            path,
+        })
     }
 }

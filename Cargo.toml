@@ -43,3 +43,9 @@ lto = true
 codegen-units = 1
 # panic = "abort"
 strip = true
+
+# Like release, but keeps enough symbol/debug info for profiling tools (sample/Instruments).
+[profile.profiling]
+inherits = "release"
+strip = "none"
+debug = 1
