@@ -1,9 +1,20 @@
 use clap::{Args, Parser, Subcommand};
+use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
 fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
     humantime::parse_duration(s)
+}
+
+fn parse_env_bool(s: &str) -> Result<bool, String> {
+    match s.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "y" | "on" => Ok(true),
+        "0" | "false" | "no" | "n" | "off" => Ok(false),
+        _ => Err(format!(
+            "invalid boolean value: {s} (expected 1/0, true/false, yes/no)"
+        )),
+    }
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -84,6 +95,24 @@ pub struct RunArgs {
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::HumanReadable)]
     pub output: OutputFormat,
+
+    /// Enable a local live dashboard server (HTML + WebSocket progress stream).
+    ///
+    /// For security, binding to non-loopback addresses is rejected.
+    #[arg(long, env = "WRKR_DASHBOARD", value_parser = parse_env_bool)]
+    pub dashboard: bool,
+
+    /// Dashboard port to bind on loopback (e.g. 8080). Omit for an ephemeral port.
+    ///
+    /// Conflicts with --dashboard-bind.
+    #[arg(long, env = "WRKR_DASHBOARD_PORT", conflicts_with = "dashboard_bind")]
+    pub dashboard_port: Option<u16>,
+
+    /// Address to bind the dashboard server to (e.g. 127.0.0.1:0 for an ephemeral port).
+    ///
+    /// Conflicts with --dashboard-port.
+    #[arg(long, env = "WRKR_DASHBOARD_BIND", conflicts_with = "dashboard_port")]
+    pub dashboard_bind: Option<SocketAddr>,
 }
 
 #[cfg(test)]

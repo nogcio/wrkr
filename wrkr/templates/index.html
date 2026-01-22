@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wrkr — progress</title>
+    <script src="/assets/chart.umd.min.js"></script>
+    <style>
+      :root { color-scheme: light dark; }
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 16px; }
+      h1 { font-size: 18px; margin: 0 0 12px; }
+      .muted { opacity: 0.7; font-size: 12px; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin: 12px 0 16px; }
+      .card { border: 1px solid rgba(127,127,127,0.25); border-radius: 8px; padding: 10px; height: 220px; }
+      .card h2 { font-size: 12px; margin: 0 0 8px; opacity: 0.85; }
+      .card canvas { display: block; width: 100% !important; height: 180px !important; }
+      @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; }
+      th, td { border-bottom: 1px solid rgba(127,127,127,0.25); padding: 6px 8px; text-align: left; white-space: nowrap; }
+      th { position: sticky; top: 0; background: Canvas; }
+      .right { text-align: right; font-variant-numeric: tabular-nums; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    </style>
+  </head>
+  <body data-max-points="{{ max_points }}">
+    <h1>wrkr — progress</h1>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 8px;">
+      <div id="status" class="muted">connecting…</div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>RPS (requests/sec)</h2>
+        <canvas id="chartRps" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Latency percentiles (ms)</h2>
+        <canvas id="chartLat" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Error rate (%)</h2>
+        <canvas id="chartErrRate" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Active VUs</h2>
+        <canvas id="chartVus" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Iterations/sec</h2>
+        <canvas id="chartIters" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Network (bytes/sec)</h2>
+        <canvas id="chartNet" height="120"></canvas>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>scenario</th>
+          <th>exec</th>
+          <th class="right">elapsed</th>
+          <th class="right">vus</th>
+          <th class="right">rps</th>
+          <th class="right">p95(ms)</th>
+          <th class="right">err%</th>
+          <th class="right">iters/s</th>
+          <th class="right">req_total</th>
+          <th class="right">failed_req</th>
+          <th class="right">checks_failed</th>
+          <th class="right">rx/s</th>
+          <th class="right">tx/s</th>
+          <th class="right">dropped</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div style="margin-top: 12px;">
+      <div class="muted" style="margin-bottom: 6px;">Errors (last interval, by status/code)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>scenario</th>
+            <th>error</th>
+            <th class="right">count</th>
+          </tr>
+        </thead>
+        <tbody id="errors"></tbody>
+      </table>
+    </div>
+    <script>
+      const statusEl = document.getElementById("status");
+      const rowsEl = document.getElementById("rows");
+      const errorsEl = document.getElementById("errors");
+      const state = new Map(); // scenario -> row
+      const MAX_POINTS = Number(document.body?.dataset?.maxPoints ?? "300"); // last ~5 minutes at 1Hz (client-side cap)
+
+      const palette = [
+        "#3b82f6", "#ef4444", "#22c55e", "#a855f7", "#f59e0b",
+        "#06b6d4", "#f97316", "#84cc16", "#e11d48", "#14b8a6",
+      ];
+      const colorByScenario = new Map();
+      function colorForScenario(scenario) {
+        if (colorByScenario.has(scenario)) return colorByScenario.get(scenario);
+        const c = palette[colorByScenario.size % palette.length];
+        colorByScenario.set(scenario, c);
+        return c;
+      }
+
+      function makeChart(canvasId, yLabel) {
+        const el = document.getElementById(canvasId);
+        if (!el || typeof Chart === "undefined") return null;
+        const ctx = el.getContext("2d");
+        return new Chart(ctx, {
+          type: "line",
+          data: { datasets: [] },
+          options: {
+            animation: false,
+            responsive: true,
+            maintainAspectRatio: false,
+            parsing: false,
+            interaction: { mode: "nearest", intersect: false },
+            plugins: { legend: { display: true, labels: { boxWidth: 10 } } },
+            scales: {
+              x: { type: "linear", title: { display: true, text: "elapsed (s)" } },
+              y: { title: { display: true, text: yLabel } },
+            },
+            elements: { point: { radius: 0 } },
+          },
+        });
+      }
+
+      const chartRps = makeChart("chartRps", "rps");
+      const chartLat = makeChart("chartLat", "ms");
+      const chartErrRate = makeChart("chartErrRate", "%");
+      const chartVus = makeChart("chartVus", "vus");
+      const chartIters = makeChart("chartIters", "iters/s");
+      const chartNet = makeChart("chartNet", "bytes/s");
+      if (!chartRps || !chartLat || !chartErrRate || !chartVus || !chartIters || !chartNet) {
+        statusEl.textContent = "connected (Chart.js unavailable - showing table only)";
+      }
+
+      function ensureDataset(chart, label, opts) {
+        if (!chart) return null;
+        let ds = chart.data.datasets.find((d) => d.label === label);
+        if (ds) return ds;
+        const color = opts?.color ?? "#3b82f6";
+        ds = {
+          label,
+          data: [],
+          borderColor: color,
+          backgroundColor: color,
+          borderWidth: 1.5,
+          tension: 0.2,
+          borderDash: opts?.dash ?? [],
+        };
+        chart.data.datasets.push(ds);
+        return ds;
+      }
+
+      function pushPoint(chart, label, x, y, opts) {
+        if (!chart) return;
+        if (y == null || !Number.isFinite(y)) return;
+        const ds = ensureDataset(chart, label, opts);
+        if (!ds) return;
+        ds.data.push({ x, y });
+        if (ds.data.length > MAX_POINTS) ds.data.shift();
+      }
+
+      function fmtInt(v) { return (v ?? 0).toLocaleString("en-US"); }
+      function fmtFloat(v) { return (v ?? 0).toFixed(1); }
+      function fmtOptFloat(v) { return v == null ? "-" : v.toFixed(1); }
+      function fmtDur(secs) { return secs == null ? "-" : (secs + "s"); }
+      function fmtVus(cur, max) { return max == null ? fmtInt(cur) : (fmtInt(cur) + "/" + fmtInt(max)); }
+
+      function render() {
+        const scenarios = Array.from(state.keys()).sort();
+        rowsEl.innerHTML = "";
+        for (const scenario of scenarios) {
+          const r = state.get(scenario);
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td class="mono">${scenario}</td>
+            <td class="mono">${r.exec ?? ""}</td>
+            <td class="right mono">${fmtDur(r.elapsed_secs)}</td>
+            <td class="right mono">${fmtVus(r.vus_current, r.vus_max)}</td>
+            <td class="right mono">${fmtFloat(r.rps_now)}</td>
+            <td class="right mono">${fmtOptFloat(r.latency_p95_ms_now)}</td>
+            <td class="right mono">${fmtFloat((r.error_rate_now ?? 0) * 100)}</td>
+            <td class="right mono">${fmtFloat(r.iterations_per_sec_now ?? 0)}</td>
+            <td class="right mono">${fmtInt(r.requests_total)}</td>
+            <td class="right mono">${fmtInt(r.failed_requests_total)}</td>
+            <td class="right mono">${fmtInt(r.checks_failed_total)}</td>
+            <td class="right mono">${fmtInt(r.bytes_received_per_sec_now)}</td>
+            <td class="right mono">${fmtInt(r.bytes_sent_per_sec_now)}</td>
+            <td class="right mono">${fmtInt(r.dropped_iterations_total)}</td>
+          `;
+          rowsEl.appendChild(tr);
+        }
+
+        if (errorsEl) {
+          errorsEl.innerHTML = "";
+          for (const scenario of scenarios) {
+            const r = state.get(scenario);
+            const errs = r?.errors_now ?? {};
+            const items = Object.entries(errs)
+              .filter(([, v]) => (v ?? 0) > 0)
+              .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
+              .slice(0, 10);
+            for (const [k, v] of items) {
+              const tr = document.createElement("tr");
+              tr.innerHTML = `
+                <td class="mono">${scenario}</td>
+                <td class="mono">${k}</td>
+                <td class="right mono">${fmtInt(v)}</td>
+              `;
+              errorsEl.appendChild(tr);
+            }
+          }
+        }
+      }
+
+      function chartsUpdate() {
+        if (chartRps) chartRps.update("none");
+        if (chartLat) chartLat.update("none");
+        if (chartErrRate) chartErrRate.update("none");
+        if (chartVus) chartVus.update("none");
+        if (chartIters) chartIters.update("none");
+        if (chartNet) chartNet.update("none");
+      }
+
+      function setSeries(chart, label, points, opts) {
+        if (!chart) return;
+        const ds = ensureDataset(chart, label, opts);
+        if (!ds) return;
+        ds.data = (points ?? []).slice(-MAX_POINTS);
+      }
+
+      function clearCharts() {
+        if (chartRps) chartRps.data.datasets = [];
+        if (chartLat) chartLat.data.datasets = [];
+        if (chartErrRate) chartErrRate.data.datasets = [];
+        if (chartVus) chartVus.data.datasets = [];
+        if (chartIters) chartIters.data.datasets = [];
+        if (chartNet) chartNet.data.datasets = [];
+        colorByScenario.clear();
+      }
+
+      const metricDashes = {
+        p50: [],
+        p90: [6, 4],
+        p95: [2, 3],
+        p99: [10, 4, 2, 4],
+        rx: [],
+        tx: [6, 4],
+      };
+
+      function applySnapshot(msg) {
+        state.clear();
+        clearCharts();
+        for (const [scenario, snap] of Object.entries(msg.scenarios ?? {})) {
+          const latest = snap.latest ?? snap;
+          state.set(scenario, latest);
+          if (snap.series) {
+            const color = colorForScenario(scenario);
+            setSeries(chartRps, scenario, snap.series.rps, { color });
+            setSeries(chartLat, scenario + " p50", snap.series.lat_p50, { color, dash: metricDashes.p50 });
+            setSeries(chartLat, scenario + " p90", snap.series.lat_p90, { color, dash: metricDashes.p90 });
+            setSeries(chartLat, scenario + " p95", snap.series.lat_p95, { color, dash: metricDashes.p95 });
+            setSeries(chartLat, scenario + " p99", snap.series.lat_p99, { color, dash: metricDashes.p99 });
+            setSeries(chartErrRate, scenario, snap.series.error_rate, { color });
+            setSeries(chartVus, scenario, snap.series.vus, { color });
+            setSeries(chartIters, scenario, snap.series.iters, { color });
+            setSeries(chartNet, scenario + " rx", snap.series.rx, { color, dash: metricDashes.rx });
+            setSeries(chartNet, scenario + " tx", snap.series.tx, { color, dash: metricDashes.tx });
+          } else {
+            const color = colorForScenario(scenario);
+            pushPoint(chartRps, scenario, latest.elapsed_secs, latest.rps_now, { color });
+            pushPoint(chartLat, scenario + " p50", latest.elapsed_secs, latest.latency_p50_ms_now, { color, dash: metricDashes.p50 });
+            pushPoint(chartLat, scenario + " p90", latest.elapsed_secs, latest.latency_p90_ms_now, { color, dash: metricDashes.p90 });
+            pushPoint(chartLat, scenario + " p95", latest.elapsed_secs, latest.latency_p95_ms_now, { color, dash: metricDashes.p95 });
+            pushPoint(chartLat, scenario + " p99", latest.elapsed_secs, latest.latency_p99_ms_now, { color, dash: metricDashes.p99 });
+            pushPoint(chartErrRate, scenario, latest.elapsed_secs, (latest.error_rate_now ?? 0) * 100, { color });
+            pushPoint(chartVus, scenario, latest.elapsed_secs, latest.vus_current, { color });
+            pushPoint(chartIters, scenario, latest.elapsed_secs, latest.iterations_per_sec_now, { color });
+            pushPoint(chartNet, scenario + " rx", latest.elapsed_secs, latest.bytes_received_per_sec_now, { color, dash: metricDashes.rx });
+            pushPoint(chartNet, scenario + " tx", latest.elapsed_secs, latest.bytes_sent_per_sec_now, { color, dash: metricDashes.tx });
+          }
+        }
+        render();
+        chartsUpdate();
+      }
+
+      function wsUrl() {
+        const proto = location.protocol === "https:" ? "wss:" : "ws:";
+        return proto + "//" + location.host + "/ws";
+      }
+
+      const ws = new WebSocket(wsUrl());
+      ws.onopen = () => { statusEl.textContent = "connected"; };
+      ws.onclose = () => { statusEl.textContent = "disconnected"; statusEl.classList.add("mono"); };
+      ws.onerror = () => { statusEl.textContent = "error"; };
+      ws.onmessage = (ev) => {
+        let msg;
+        try { msg = JSON.parse(ev.data); } catch { return; }
+        if (msg.type === "snapshot") {
+          applySnapshot(msg);
+          return;
+        }
+        if (msg.type === "update") {
+          if (msg.scenario && msg.data) {
+            state.set(msg.scenario, msg.data);
+            const r = msg.data;
+            const color = colorForScenario(msg.scenario);
+            pushPoint(chartRps, msg.scenario, r.elapsed_secs, r.rps_now, { color });
+            pushPoint(chartLat, msg.scenario + " p50", r.elapsed_secs, r.latency_p50_ms_now, { color, dash: metricDashes.p50 });
+            pushPoint(chartLat, msg.scenario + " p90", r.elapsed_secs, r.latency_p90_ms_now, { color, dash: metricDashes.p90 });
+            pushPoint(chartLat, msg.scenario + " p95", r.elapsed_secs, r.latency_p95_ms_now, { color, dash: metricDashes.p95 });
+            pushPoint(chartLat, msg.scenario + " p99", r.elapsed_secs, r.latency_p99_ms_now, { color, dash: metricDashes.p99 });
+            pushPoint(chartErrRate, msg.scenario, r.elapsed_secs, (r.error_rate_now ?? 0) * 100, { color });
+            pushPoint(chartVus, msg.scenario, r.elapsed_secs, r.vus_current, { color });
+            pushPoint(chartIters, msg.scenario, r.elapsed_secs, r.iterations_per_sec_now, { color });
+            pushPoint(chartNet, msg.scenario + " rx", r.elapsed_secs, r.bytes_received_per_sec_now, { color, dash: metricDashes.rx });
+            pushPoint(chartNet, msg.scenario + " tx", r.elapsed_secs, r.bytes_sent_per_sec_now, { color, dash: metricDashes.tx });
+            render();
+            chartsUpdate();
+          }
+          return;
+        }
+        if (msg.type === "done") {
+          statusEl.textContent = "done (run finished)";
+        }
+      };
+    </script>
+  </body>
+</html>
+

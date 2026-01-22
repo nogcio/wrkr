@@ -49,79 +49,6 @@ impl GrpcMethod {
 }
 
 impl ProtoSchema {
-    fn resolve_protoc() -> Result<std::ffi::OsString> {
-        if let Some(p) = std::env::var_os("PROTOC").filter(|v| !v.is_empty()) {
-            return Ok(p);
-        }
-
-        if let Some(p) = Self::bundled_protoc_path() {
-            return Ok(p.into_os_string());
-        }
-
-        if Self::path_protoc_is_runnable() {
-            return Ok(std::ffi::OsString::from("protoc"));
-        }
-
-        Err(Error::ProtocBin(
-            "no runnable protoc found; install protoc and ensure it's on PATH, set PROTOC=/path/to/protoc, or place protoc next to the wrkr binary"
-                .to_string(),
-        ))
-    }
-
-    fn bundled_protoc_path() -> Option<PathBuf> {
-        let exe = std::env::current_exe().ok()?;
-        let exe_dir = exe.parent()?;
-
-        let filename = if cfg!(windows) {
-            "protoc.exe"
-        } else {
-            "protoc"
-        };
-        let candidate = exe_dir.join(filename);
-        if !candidate.is_file() {
-            return None;
-        }
-
-        if Self::protoc_is_runnable(&candidate) {
-            Some(candidate)
-        } else {
-            None
-        }
-    }
-
-    fn bundled_protoc_include_dir() -> Option<PathBuf> {
-        let exe = std::env::current_exe().ok()?;
-        let exe_dir = exe.parent()?;
-
-        // When distributing protoc, we also ship the well-known-types protos.
-        // This is needed for imports like "google/protobuf/timestamp.proto".
-        let candidate = exe_dir.join("protoc-include");
-        let sentinel = candidate.join("google").join("protobuf").join("any.proto");
-
-        if sentinel.is_file() {
-            Some(candidate)
-        } else {
-            None
-        }
-    }
-
-    fn protoc_is_runnable(path: &Path) -> bool {
-        match std::process::Command::new(path).arg("--version").output() {
-            Ok(out) => out.status.success(),
-            Err(_) => false,
-        }
-    }
-
-    fn path_protoc_is_runnable() -> bool {
-        match std::process::Command::new("protoc")
-            .arg("--version")
-            .output()
-        {
-            Ok(out) => out.status.success(),
-            Err(_) => false,
-        }
-    }
-
     pub fn compile_from_proto(proto_file: &Path, include_paths: &[PathBuf]) -> Result<Self> {
         let mut include_paths: Vec<PathBuf> = include_paths.to_vec();
 
@@ -129,15 +56,12 @@ impl ProtoSchema {
             include_paths.push(dir.to_path_buf());
         }
 
-        if let Some(wkt_dir) = Self::bundled_protoc_include_dir() {
-            include_paths.push(wkt_dir);
-        }
-
         // Deduplicate while preserving order (tiny input sizes).
         let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
         include_paths.retain(|p| seen.insert(p.clone()));
 
-        let protoc = Self::resolve_protoc()?;
+        let protoc =
+            protoc_bin_vendored::protoc_bin_path().map_err(|e| Error::ProtocBin(e.to_string()))?;
 
         let out = tempfile::NamedTempFile::new()?;
         let out_path = out.path().to_path_buf();

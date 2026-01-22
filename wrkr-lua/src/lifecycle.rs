@@ -21,7 +21,18 @@ fn init_lua(
 ) -> Result<Lua> {
     let lua = Lua::new();
     configure_module_path(&lua, script_path)?;
-    modules::register(&lua, script_path, env_vars, 0, client, stats, shared)?;
+    modules::register(
+        &lua,
+        modules::RegisterRuntime {
+            script_path,
+            env_vars,
+            vu_id: 0,
+            scenario: Arc::<str>::from("__wrkr_internal"),
+            client,
+            stats,
+            shared,
+        },
+    )?;
     Ok(lua)
 }
 

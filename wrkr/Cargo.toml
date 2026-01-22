@@ -9,7 +9,10 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+askama = "0.12"
+axum = { version = "0.8", features = ["ws"] }
+clap = { version = "4", features = ["derive", "env"] }
+futures-util = "0.3"
 humantime = "2"
 indicatif = "0.18"
 serde = { version = "1", features = ["derive"] }
@@ -20,12 +23,17 @@ tokio = { version = "1", features = [
     "fs",
     "io-util",
     "process",
+    "net",
+    "sync",
+    "time",
 ] }
 mimalloc = "0.1.48"
 wrkr-core = { path = "../wrkr-core" }
 wrkr-lua = { path = "../wrkr-lua" }
 
 [dev-dependencies]
+tokio-tungstenite = "0.26"
+url = "2"
 wrkr-testserver = { path = "../wrkr-testserver" }
 
 [lints]

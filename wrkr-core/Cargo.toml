@@ -18,6 +18,7 @@ wrkr-value = { path = "../wrkr-value" }
 prost = { workspace = true }
 prost-reflect = { workspace = true }
 prost-types = { workspace = true }
+protoc-bin-vendored = { workspace = true }
 strum = { workspace = true }
 tempfile = "3"
 thiserror = "2"

@@ -26,27 +26,34 @@ fn preload_set(lua: &Lua, name: &str, loader: mlua::Function) -> Result<()> {
     Ok(())
 }
 
-pub fn register(
-    lua: &Lua,
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    vu_id: u64,
-    client: Arc<wrkr_core::HttpClient>,
-    stats: Arc<wrkr_core::runner::RunStats>,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-) -> Result<()> {
-    http::register_runtime(lua, client.clone(), stats.clone())?;
-    grpc::register_runtime(lua, script_path, stats.clone())?;
-    check::register_runtime(lua, stats.clone())?;
-    metrics::register_runtime(lua, stats.clone())?;
-    env::register_runtime(lua, env_vars)?;
-    fs::register(lua, script_path)?;
+pub struct RegisterRuntime<'a> {
+    pub script_path: Option<&'a Path>,
+    pub env_vars: &'a wrkr_core::runner::EnvVars,
+    pub vu_id: u64,
+    pub scenario: Arc<str>,
+    pub client: Arc<wrkr_core::HttpClient>,
+    pub stats: Arc<wrkr_core::runner::RunStats>,
+    pub shared: Arc<wrkr_core::runner::SharedStore>,
+}
+
+pub fn register(lua: &Lua, rt: RegisterRuntime<'_>) -> Result<()> {
+    http::register_runtime(
+        lua,
+        rt.scenario.clone(),
+        rt.client.clone(),
+        rt.stats.clone(),
+    )?;
+    grpc::register_runtime(lua, rt.scenario.clone(), rt.script_path, rt.stats.clone())?;
+    check::register_runtime(lua, rt.scenario.clone(), rt.stats.clone())?;
+    metrics::register_runtime(lua, rt.stats.clone())?;
+    env::register_runtime(lua, rt.env_vars)?;
+    fs::register(lua, rt.script_path)?;
     debug::register(lua)?;
     json::register(lua)?;
     uuid::register(lua)?;
-    vu::register(lua, vu_id)?;
+    vu::register(lua, rt.vu_id)?;
     group::register(lua)?;
-    shared::register_runtime(lua, shared)?;
+    shared::register_runtime(lua, rt.shared)?;
     wrkr::register(lua)?;
     Ok(())
 }

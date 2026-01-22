@@ -1,0 +1,50 @@
+Project rules (authoritative source: `.github/copilot-instructions.md`).
+
+Follow these principles for ALL changes in this repo:
+
+- DRY: avoid duplicating logic; extract shared code into reusable functions/modules.
+- KISS: choose the simplest solution that correctly meets the requirements.
+- Maintainability & extensibility first: changes should be clear, localized, and safe.
+- No backward compatibility by default: when refactoring/redesigning, do not preserve old behavior unless explicitly requested; remove obsolete APIs/code paths/flags/tests/docs.
+- Testability first: favor small, composable modules and clean seams; add/adjust tests to cover behavior.
+- Tests: no inline scripts. Scripts must live in dedicated files and tests must load them from disk.
+- Performance is critical: prefer efficient algorithms/data structures; avoid unnecessary work.
+- No cutting corners: if something is unclear, read the docs/sources instead of adding brittle hacks.
+- Keep documentation up to date alongside code changes.
+- Modularity is non‑negotiable: keep files small and focused; introduce new “things” in dedicated modules/files.
+- Idiomatic Rust & best practices: `cargo fmt`/`clippy`, clear ownership/lifetimes, avoid `unsafe` unless justified.
+
+Lua runner API rules:
+- No globals: do not expose `http`, `check`, `__ENV`, `open`, etc. as Lua globals.
+- Modules only: expose Lua APIs via `require("wrkr/...")` modules (e.g. `wrkr/http`, `wrkr/check`, `wrkr/env`, `wrkr/fs`).
+
+Lua integration notes (how it works here):
+- Runtime implementation: `wrkr-lua/src/*` (entrypoints: `parse_script_options`, `run_vu`).
+- Built-in Lua modules: Rust code under `wrkr-lua/src/modules/*.rs`, registered via `package.preload`.
+- LuaLS/editor stubs: `wrkr-lua/lua-stubs/wrkr`.
+- User docs: `wrkr-lua/README.md`.
+- Module model: built-ins only via `require("wrkr/...")` (plus `require("wrkr")` aggregate).
+- Runner prepends script dir to `package.path` (`?.lua` and `?/init.lua`).
+- Optional external module paths: `WRKR_LUA_PATH`/`LUA_PATH` and `WRKR_LUA_CPATH`/`LUA_CPATH`.
+- Execution flow: 2-phase (parse options once; then run scenarios; each VU creates its own Lua state and calls selected entry function).
+- Sandboxing: no CPU/time/memory sandbox; default Lua is `mlua::Lua::new()` (safe mode, no `debug` stdlib); debugging uses `mlua::Lua::unsafe_new()` for `lldebugger`.
+
+Validation workflow (hard requirement):
+- `cargo fmt --all`
+- `cargo clippy --all-targets -- -D warnings`
+- `cargo test --workspace` (or narrowest applicable subset)
+
+Rust 2024 + clippy is the contract: treat clippy warnings as errors.
+
+Clippy-clean by default:
+- No unused things (imports/vars/`mut`/dead code); use `_var` for intentionally unused bindings.
+- Prefer inlined format args: `format!("{value}")` / `println!("{value:?}")`.
+- Avoid needless conversions/borrows/clones.
+- Avoid needless control flow (no trailing `return`, no `else` after early return, etc.).
+- Prefer idiomatic Option/Result patterns (`is_some_and`, `map_or`, `unwrap_or_else`, `ok_or_else`, `matches!`).
+- Don’t ignore fallible results; only `unwrap/expect` in tests (with clear messages).
+
+Errors & Results:
+- Library crates (`wrkr-core`, `wrkr-lua`): prefer crate-local typed `Error` and `Result<T, Error>`.
+- Binaries (`wrkr`): `anyhow::Result` / `anyhow::Error` is OK for top-level wiring/context.
+

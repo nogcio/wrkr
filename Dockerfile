@@ -3,7 +3,6 @@ WORKDIR /app
 ENV RUSTFLAGS="-C target-feature=-crt-static"
 RUN apk add --no-cache \
 		build-base \
-		protobuf \
 		luajit-dev \
 		pkgconfig
 RUN cargo install cargo-chef --locked
@@ -54,7 +53,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 
 # Runtime stage
 FROM alpine:3.23
-RUN apk add --no-cache ca-certificates luajit protobuf \
+RUN apk add --no-cache ca-certificates luajit \
 	&& addgroup -S wrkr \
 	&& adduser -S wrkr -G wrkr
 
