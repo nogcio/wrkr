@@ -470,10 +470,6 @@ impl RunStats {
             self.record_check_handle(&h, false);
         } else if let Some(status) = req.status {
             self.record_http_status(status);
-            if status >= 400 {
-                let h = self.check_handle(&format!("http_status:{status}"));
-                self.record_check_handle(&h, false);
-            }
         }
         self.record_latency(req.elapsed);
 
