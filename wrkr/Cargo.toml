@@ -32,6 +32,7 @@ wrkr-core = { path = "../wrkr-core" }
 wrkr-lua = { path = "../wrkr-lua" }
 
 [dev-dependencies]
+tempfile = "3"
 tokio-tungstenite = "0.26"
 url = "2"
 wrkr-testserver = { path = "../wrkr-testserver" }

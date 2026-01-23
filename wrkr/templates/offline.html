@@ -4,14 +4,13 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>wrkr — progress</title>
-    <script src="/assets/chart.umd.min.js"></script>
-    <link rel="stylesheet" href="/assets/dashboard.css" />
-    <script src="/assets/dashboard.js" defer></script>
+    <style>{{ dashboard_css|safe }}</style>
+    <script>{{ chart_js|safe }}</script>
   </head>
   <body data-max-points="{{ max_points }}">
     <h1>wrkr — progress</h1>
     <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 8px;">
-      <div id="status" class="muted">connecting…</div>
+      <div id="status" class="muted">offline…</div>
     </div>
     <div class="grid">
       <div class="card">
@@ -73,6 +72,8 @@
         <tbody id="errors"></tbody>
       </table>
     </div>
+    <script id="wrkrSnapshot" type="application/json">{{ snapshot_json|safe }}</script>
+    <script>{{ dashboard_js|safe }}</script>
   </body>
 </html>
 

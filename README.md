@@ -113,7 +113,7 @@ BASE_URL="https://example.com" cargo run --bin wrkr -- run examples/plaintext.lu
 ## Usage
 
 ```bash
-wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json] [--dashboard] [--dashboard-port <port> | --dashboard-bind <addr>]
+wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json] [--dashboard] [--dashboard-out <path>] [--dashboard-port <port> | --dashboard-bind <addr>]
 ```
 
 Notes:
@@ -134,6 +134,7 @@ wrkr run examples/plaintext.lua --dashboard
 Notes:
 
 - You can also enable the dashboard via env: `WRKR_DASHBOARD=1` (equivalent to `--dashboard`).
+- You can write a self-contained offline dashboard HTML via env: `WRKR_DASHBOARD_OUT=...` (equivalent to `--dashboard-out`).
 - The server binds to loopback only (e.g. `127.0.0.1`). Remote binding is intentionally rejected.
 - You can configure the bind via `--dashboard-bind` (use `:0` for an ephemeral port) or `--dashboard-port`.
 

@@ -104,6 +104,10 @@ pub struct RunArgs {
     #[arg(long, env = "WRKR_DASHBOARD", value_parser = parse_env_bool)]
     pub dashboard: bool,
 
+    /// Write a single self-contained offline HTML dashboard file at the end of the run.
+    #[arg(long, env = "WRKR_DASHBOARD_OUT", value_name = "PATH")]
+    pub dashboard_out: Option<PathBuf>,
+
     /// Dashboard port to bind on loopback (e.g. 8080). Omit for an ephemeral port.
     ///
     /// Conflicts with --dashboard-bind.
@@ -139,6 +143,8 @@ mod tests {
             "EMPTY=",
             "--output",
             "human-readable",
+            "--dashboard-out",
+            "out.html",
         ]);
 
         let cli = match parsed {
@@ -154,6 +160,7 @@ mod tests {
                 assert_eq!(args.duration, Some(Duration::from_millis(250)));
                 assert_eq!(args.env, vec!["FOO=bar".to_string(), "EMPTY=".to_string()]);
                 assert!(matches!(args.output, OutputFormat::HumanReadable));
+                assert_eq!(args.dashboard_out, Some(PathBuf::from("out.html")));
             }
             Command::Init(_) => panic!("expected run command"),
         }

@@ -7,7 +7,7 @@ use std::sync::Arc;
 use crate::cli::OutputFormat;
 use crate::cli::RunArgs;
 use crate::output;
-use crate::web::{WebUi, WebUiConfig};
+use crate::web::{Dashboard, WebUi, WebUiConfig};
 
 pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     let out = output::formatter(args.output);
@@ -17,7 +17,22 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     let cfg = run_config(&args);
     let script_path = Some(args.script.as_path());
 
-    let mut dashboard = if args.dashboard {
+    if !args.dashboard
+        && args.dashboard_out.is_some()
+        && (args.dashboard_port.is_some() || args.dashboard_bind.is_some())
+    {
+        anyhow::bail!("--dashboard-port/--dashboard-bind requires --dashboard");
+    }
+
+    let dashboard_out = args.dashboard_out.clone();
+
+    let dashboard = if args.dashboard || dashboard_out.is_some() {
+        Some(Arc::new(Dashboard::new()))
+    } else {
+        None
+    };
+
+    let mut web_ui = if args.dashboard {
         let bind_addr = dashboard_bind_addr(&args)?;
         if !bind_addr.ip().is_loopback() {
             anyhow::bail!(
@@ -25,7 +40,11 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
             );
         }
 
-        let web = WebUi::start(WebUiConfig { bind_addr }).await?;
+        let dashboard = dashboard
+            .as_ref()
+            .context("dashboard should be initialized when --dashboard is set")?
+            .clone();
+        let web = WebUi::start(WebUiConfig { bind_addr }, dashboard).await?;
         eprintln!("dashboard={}", web.url());
         Some(web)
     } else {
@@ -56,7 +75,26 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     if let Some(d) = &dashboard {
         d.notify_done();
     }
-    if let Some(d) = dashboard.take() {
+
+    if let Some(path) = dashboard_out {
+        let dashboard = dashboard
+            .as_ref()
+            .context("dashboard should be initialized when --dashboard-out is set")?;
+        let html = dashboard.render_offline_html()?;
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            tokio::fs::create_dir_all(parent).await.with_context(|| {
+                format!(
+                    "failed to create dashboard output dir: {}",
+                    parent.display()
+                )
+            })?;
+        }
+        tokio::fs::write(&path, html)
+            .await
+            .with_context(|| format!("failed to write dashboard html: {}", path.display()))?;
+    }
+
+    if let Some(d) = web_ui.take() {
         d.shutdown().await;
     }
 
@@ -105,7 +143,7 @@ async fn run_lua_script(
     env: &wrkr_core::runner::EnvVars,
     cfg: wrkr_core::runner::RunConfig,
     out: &dyn output::OutputFormatter,
-    web_ui: Option<&WebUi>,
+    dashboard: Option<&Arc<Dashboard>>,
 ) -> anyhow::Result<(
     wrkr_core::runner::RunSummary,
     Vec<wrkr_core::runner::ThresholdViolation>,
@@ -132,7 +170,7 @@ async fn run_lua_script(
         wrkr_core::runner::scenarios_from_options(opts, cfg).context("invalid scenario config")?;
 
     out.print_header(args.script.as_path(), &scenarios);
-    let progress = compose_progress(out.progress(), web_ui.map(WebUi::progress_fn));
+    let progress = compose_progress(out.progress(), dashboard.map(|d| d.progress_fn()));
 
     let summary = wrkr_core::runner::run_scenarios(
         script,
