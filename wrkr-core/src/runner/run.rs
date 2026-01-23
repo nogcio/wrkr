@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -431,8 +432,41 @@ where
             let mut last_at = Instant::now();
             let mut last_http_requests_total = stats.http_requests_total();
             let mut last_grpc_requests_total = stats.grpc_requests_total();
-            let mut last_bytes_received_total = stats.bytes_received_total();
-            let mut last_bytes_sent_total = stats.bytes_sent_total();
+            for s in &scenarios {
+                stats.ensure_scenario(&s.name);
+            }
+
+            #[derive(Debug, Clone)]
+            struct LastTotals {
+                http_requests_total: u64,
+                grpc_requests_total: u64,
+                bytes_received_total: u64,
+                bytes_sent_total: u64,
+                failed_requests_total: u64,
+                iterations_total: u64,
+                errors_total: HashMap<String, u64>,
+            }
+
+            let mut last_by_scenario: HashMap<String, LastTotals> = scenarios
+                .iter()
+                .map(|s| {
+                    let scenario = s.name.clone();
+                    (
+                        scenario.clone(),
+                        LastTotals {
+                            http_requests_total: stats.http_requests_total_for_scenario(&scenario),
+                            grpc_requests_total: stats.grpc_requests_total_for_scenario(&scenario),
+                            bytes_received_total: stats
+                                .bytes_received_total_for_scenario(&scenario),
+                            bytes_sent_total: stats.bytes_sent_total_for_scenario(&scenario),
+                            failed_requests_total: stats
+                                .failed_requests_total_for_scenario(&scenario),
+                            iterations_total: stats.iterations_total_for_scenario(&scenario),
+                            errors_total: stats.errors_snapshot_for_scenario(&scenario),
+                        },
+                    )
+                })
+                .collect();
 
             loop {
                 interval.tick().await;
@@ -444,6 +478,7 @@ where
 
                 let elapsed = started.elapsed();
 
+                // Keep global RPS samples for final run summary (req_per_sec_* fields).
                 let http_requests_total = stats.http_requests_total();
                 let delta_http_req = http_requests_total.saturating_sub(last_http_requests_total);
                 last_http_requests_total = http_requests_total;
@@ -454,68 +489,145 @@ where
                 last_grpc_requests_total = grpc_requests_total;
                 let grpc_rps_now = (delta_grpc_req as f64) / dt.as_secs_f64().max(1e-9);
 
-                let rps_now = http_rps_now + grpc_rps_now;
-                stats.record_rps_sample(rps_now);
-
-                let bytes_received_total = stats.bytes_received_total();
-                let delta_bytes = bytes_received_total.saturating_sub(last_bytes_received_total);
-                last_bytes_received_total = bytes_received_total;
-                let bytes_received_per_sec_now =
-                    (delta_bytes as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
-
-                let bytes_sent_total = stats.bytes_sent_total();
-                let delta_sent = bytes_sent_total.saturating_sub(last_bytes_sent_total);
-                last_bytes_sent_total = bytes_sent_total;
-                let bytes_sent_per_sec_now =
-                    (delta_sent as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
-
-                let (lat_p50_ms, lat_p95_ms) = stats.take_latency_window_ms();
-
-                let latency = stats.latency_snapshot_ms();
-                let (req_per_sec_avg, req_per_sec_stdev, req_per_sec_max, req_per_sec_stdev_pct) =
-                    stats.req_per_sec_summary();
-                let checks_failed_total = stats.checks_failed_total();
-                let checks_failed = stats.errors_snapshot();
-
-                let iterations_total = stats.iterations_total();
-                let failed_requests_total = stats.failed_requests_total();
-                let requests_total = stats.requests_total();
-
-                let latency_stdev_pct = if latency.mean_ms > 0.0 {
-                    (latency.stdev_ms / latency.mean_ms) * 100.0
-                } else {
-                    0.0
-                };
-
-                let metrics = LiveMetrics {
-                    rps_now,
-                    bytes_received_per_sec_now,
-                    bytes_sent_per_sec_now,
-                    requests_total,
-                    bytes_received_total,
-                    bytes_sent_total,
-                    failed_requests_total,
-                    checks_failed_total,
-                    req_per_sec_avg,
-                    req_per_sec_stdev,
-                    req_per_sec_max,
-                    req_per_sec_stdev_pct,
-                    latency_mean_ms: latency.mean_ms,
-                    latency_stdev_ms: latency.stdev_ms,
-                    latency_max_ms: latency.max_ms,
-                    latency_p50_ms: latency.p50_ms,
-                    latency_p75_ms: latency.p75_ms,
-                    latency_p90_ms: latency.p90_ms,
-                    latency_p99_ms: latency.p99_ms,
-                    latency_stdev_pct,
-                    latency_distribution_ms: latency.distribution_ms,
-                    checks_failed,
-                    latency_p50_ms_now: lat_p50_ms,
-                    latency_p95_ms_now: lat_p95_ms,
-                    iterations_total,
-                };
+                stats.record_rps_sample(http_rps_now + grpc_rps_now);
 
                 for s in &scenarios {
+                    let last =
+                        last_by_scenario
+                            .entry(s.name.clone())
+                            .or_insert_with(|| LastTotals {
+                                http_requests_total: stats
+                                    .http_requests_total_for_scenario(&s.name),
+                                grpc_requests_total: stats
+                                    .grpc_requests_total_for_scenario(&s.name),
+                                bytes_received_total: stats
+                                    .bytes_received_total_for_scenario(&s.name),
+                                bytes_sent_total: stats.bytes_sent_total_for_scenario(&s.name),
+                                failed_requests_total: stats
+                                    .failed_requests_total_for_scenario(&s.name),
+                                iterations_total: stats.iterations_total_for_scenario(&s.name),
+                                errors_total: stats.errors_snapshot_for_scenario(&s.name),
+                            });
+
+                    let http_requests_total = stats.http_requests_total_for_scenario(&s.name);
+                    let delta_http_req =
+                        http_requests_total.saturating_sub(last.http_requests_total);
+                    last.http_requests_total = http_requests_total;
+                    let http_rps_now = (delta_http_req as f64) / dt.as_secs_f64().max(1e-9);
+
+                    let grpc_requests_total = stats.grpc_requests_total_for_scenario(&s.name);
+                    let delta_grpc_req =
+                        grpc_requests_total.saturating_sub(last.grpc_requests_total);
+                    last.grpc_requests_total = grpc_requests_total;
+                    let grpc_rps_now = (delta_grpc_req as f64) / dt.as_secs_f64().max(1e-9);
+
+                    let rps_now = http_rps_now + grpc_rps_now;
+                    stats.record_rps_sample_for_scenario(&s.name, rps_now);
+
+                    let bytes_received_total = stats.bytes_received_total_for_scenario(&s.name);
+                    let delta_bytes =
+                        bytes_received_total.saturating_sub(last.bytes_received_total);
+                    last.bytes_received_total = bytes_received_total;
+                    let bytes_received_per_sec_now =
+                        (delta_bytes as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
+
+                    let bytes_sent_total = stats.bytes_sent_total_for_scenario(&s.name);
+                    let delta_sent = bytes_sent_total.saturating_sub(last.bytes_sent_total);
+                    last.bytes_sent_total = bytes_sent_total;
+                    let bytes_sent_per_sec_now =
+                        (delta_sent as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
+
+                    let (lat_p50_ms, lat_p90_ms, lat_p95_ms, lat_p99_ms) =
+                        stats.take_latency_window_ms_for_scenario(&s.name);
+
+                    let latency = stats.latency_snapshot_ms_for_scenario(&s.name);
+                    let (
+                        req_per_sec_avg,
+                        req_per_sec_stdev,
+                        req_per_sec_max,
+                        req_per_sec_stdev_pct,
+                    ) = stats.req_per_sec_summary_for_scenario(&s.name);
+                    let checks_failed_total = stats.checks_failed_total_for_scenario(&s.name);
+                    let checks_failed = stats.errors_snapshot_for_scenario(&s.name);
+
+                    let iterations_total = stats.iterations_total_for_scenario(&s.name);
+                    let failed_requests_total = stats.failed_requests_total_for_scenario(&s.name);
+                    let requests_total = stats.requests_total_for_scenario(&s.name);
+
+                    let delta_failed =
+                        failed_requests_total.saturating_sub(last.failed_requests_total);
+                    last.failed_requests_total = failed_requests_total;
+                    let failed_rps_now = (delta_failed as f64) / dt.as_secs_f64().max(1e-9);
+
+                    let delta_requests = delta_http_req.saturating_add(delta_grpc_req);
+                    let error_rate_now = if delta_requests == 0 {
+                        0.0
+                    } else {
+                        (delta_failed as f64) / (delta_requests as f64)
+                    };
+
+                    let delta_iters = iterations_total.saturating_sub(last.iterations_total);
+                    last.iterations_total = iterations_total;
+                    let iterations_per_sec_now = (delta_iters as f64) / dt.as_secs_f64().max(1e-9);
+
+                    let errors_total = stats.errors_snapshot_for_scenario(&s.name);
+                    let mut errors_now: HashMap<String, u64> = HashMap::new();
+                    for (k, v_total) in &errors_total {
+                        let prev = last.errors_total.get(k).copied().unwrap_or(0);
+                        let delta = v_total.saturating_sub(prev);
+                        if delta == 0 {
+                            continue;
+                        }
+                        if k.starts_with("http_status:")
+                            || k.starts_with("http_error:")
+                            || k.starts_with("grpc_status:")
+                            || k.starts_with("grpc_error:")
+                        {
+                            errors_now.insert(k.clone(), delta);
+                        }
+                    }
+                    last.errors_total = errors_total;
+
+                    let latency_stdev_pct = if latency.mean_ms > 0.0 {
+                        (latency.stdev_ms / latency.mean_ms) * 100.0
+                    } else {
+                        0.0
+                    };
+
+                    let metrics = LiveMetrics {
+                        rps_now,
+                        bytes_received_per_sec_now,
+                        bytes_sent_per_sec_now,
+                        requests_total,
+                        bytes_received_total,
+                        bytes_sent_total,
+                        failed_requests_total,
+                        checks_failed_total,
+                        req_per_sec_avg,
+                        req_per_sec_stdev,
+                        req_per_sec_max,
+                        req_per_sec_stdev_pct,
+                        latency_mean_ms: latency.mean_ms,
+                        latency_stdev_ms: latency.stdev_ms,
+                        latency_max_ms: latency.max_ms,
+                        latency_p50_ms: latency.p50_ms,
+                        latency_p75_ms: latency.p75_ms,
+                        latency_p90_ms: latency.p90_ms,
+                        latency_p99_ms: latency.p99_ms,
+                        latency_stdev_pct,
+                        latency_distribution_ms: latency.distribution_ms,
+                        checks_failed,
+                        latency_p50_ms_now: lat_p50_ms,
+                        latency_p90_ms_now: lat_p90_ms,
+                        latency_p95_ms_now: lat_p95_ms,
+                        latency_p99_ms_now: lat_p99_ms,
+                        failed_rps_now,
+                        error_rate_now,
+                        errors_now,
+                        iterations_total,
+                        iterations_per_sec_now,
+                    };
+
                     let progress_val = match &s.progress {
                         ScenarioProgressInfo::ConstantVus { vus, duration } => {
                             ScenarioProgress::ConstantVus {
@@ -572,7 +684,7 @@ where
                         elapsed,
                         scenario: s.name.clone(),
                         exec: s.exec.clone(),
-                        metrics: metrics.clone(),
+                        metrics,
                         progress: progress_val,
                     });
                 }

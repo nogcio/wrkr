@@ -24,6 +24,7 @@ pub fn parse_script_options(
             script_path,
             env_vars,
             vu_id: 0,
+            scenario: Arc::<str>::from("__wrkr_internal"),
             max_vus: 1,
             client,
             stats,

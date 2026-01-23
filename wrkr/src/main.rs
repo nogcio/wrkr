@@ -2,6 +2,7 @@ mod cli;
 mod init;
 mod output;
 mod run;
+mod web;
 
 use clap::Parser;
 use mimalloc::MiMalloc;

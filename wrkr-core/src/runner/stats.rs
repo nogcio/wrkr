@@ -15,6 +15,50 @@ struct CheckCounters {
     failed: AtomicU64,
 }
 
+#[derive(Debug, Default)]
+struct ScenarioChecks {
+    total: AtomicU64,
+    failed: AtomicU64,
+    failed_by_name: Mutex<HashMap<Arc<str>, u64>>,
+}
+
+impl ScenarioChecks {
+    fn record(&self, name: &str, ok: bool) {
+        self.total.fetch_add(1, Ordering::Relaxed);
+        if ok {
+            return;
+        }
+        self.failed.fetch_add(1, Ordering::Relaxed);
+
+        let mut map = self
+            .failed_by_name
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(v) = map.get_mut(name) {
+            *v += 1;
+            return;
+        }
+        let key: Arc<str> = Arc::from(name);
+        map.insert(key, 1);
+    }
+
+    fn failed_total(&self) -> u64 {
+        self.failed.load(Ordering::Relaxed)
+    }
+
+    fn errors_snapshot(&self) -> HashMap<String, u64> {
+        let map = self
+            .failed_by_name
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        map.iter()
+            .filter(|(_, failed)| **failed != 0)
+            .map(|(name, failed)| (name.to_string(), *failed))
+            .collect()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CheckHandle {
     counters: Arc<CheckCounters>,
@@ -112,6 +156,8 @@ pub struct RunStats {
 
     rps_samples: Mutex<RpsAgg>,
 
+    scenario_stats: Mutex<HashMap<Arc<str>, Arc<ScenarioStats>>>,
+
     metrics: Arc<MetricsRegistry>,
     metric_http_reqs: MetricHandle,
     metric_http_req_duration: MetricHandle,
@@ -152,6 +198,202 @@ struct GrpcTaggedSeries {
     reqs: Arc<Metric>,
     duration: Arc<Metric>,
     failed: Arc<Metric>,
+}
+
+#[derive(Debug)]
+struct ScenarioStats {
+    requests_total: AtomicU64,
+    http_requests_total: AtomicU64,
+    grpc_requests_total: AtomicU64,
+    iterations_total: AtomicU64,
+    http_errors_total: AtomicU64,
+    grpc_errors_total: AtomicU64,
+    status_4xx: AtomicU64,
+    status_5xx: AtomicU64,
+    bytes_received_total: AtomicU64,
+    bytes_sent_total: AtomicU64,
+    latency_us: Mutex<Histogram<u64>>,
+    latency_us_window: Mutex<Histogram<u64>>,
+    rps_samples: Mutex<RpsAgg>,
+    checks: ScenarioChecks,
+}
+
+impl ScenarioStats {
+    fn new() -> Self {
+        fn new_hist() -> Histogram<u64> {
+            // Track up to 60s in microseconds (with 3 sigfigs).
+            Histogram::<u64>::new_with_bounds(1, 60_000_000, 3)
+                .unwrap_or_else(|err| panic!("failed to init histogram: {err}"))
+        }
+        Self {
+            requests_total: AtomicU64::new(0),
+            http_requests_total: AtomicU64::new(0),
+            grpc_requests_total: AtomicU64::new(0),
+            iterations_total: AtomicU64::new(0),
+            http_errors_total: AtomicU64::new(0),
+            grpc_errors_total: AtomicU64::new(0),
+            status_4xx: AtomicU64::new(0),
+            status_5xx: AtomicU64::new(0),
+            bytes_received_total: AtomicU64::new(0),
+            bytes_sent_total: AtomicU64::new(0),
+            latency_us: Mutex::new(new_hist()),
+            latency_us_window: Mutex::new(new_hist()),
+            rps_samples: Mutex::new(RpsAgg::default()),
+            checks: ScenarioChecks::default(),
+        }
+    }
+
+    fn record_iteration(&self) {
+        self.iterations_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_rps_sample(&self, rps_now: f64) {
+        let mut agg = self
+            .rps_samples
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        agg.record(rps_now);
+    }
+
+    fn req_per_sec_summary(&self) -> (f64, f64, f64, f64) {
+        let agg = self
+            .rps_samples
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        agg.summary()
+    }
+
+    fn record_http_status(&self, status: u16) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.http_requests_total.fetch_add(1, Ordering::Relaxed);
+        match status {
+            400..=499 => {
+                self.status_4xx.fetch_add(1, Ordering::Relaxed);
+            }
+            500..=599 => {
+                self.status_5xx.fetch_add(1, Ordering::Relaxed);
+            }
+            _ => {}
+        }
+    }
+
+    fn record_http_error(&self) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.http_requests_total.fetch_add(1, Ordering::Relaxed);
+        self.http_errors_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_grpc_error(&self) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_errors_total.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn record_grpc_status(&self, status: u16) {
+        self.requests_total.fetch_add(1, Ordering::Relaxed);
+        self.grpc_requests_total.fetch_add(1, Ordering::Relaxed);
+        if status != 0 {
+            self.grpc_errors_total.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn record_latency(&self, elapsed: Duration) {
+        let us = elapsed.as_micros();
+        if us == 0 {
+            return;
+        }
+        let value = us as u64;
+
+        {
+            let mut h = self
+                .latency_us
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let _ = h.record(value);
+        }
+        {
+            let mut h = self
+                .latency_us_window
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let _ = h.record(value);
+        }
+    }
+
+    fn take_latency_window_ms(&self) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
+        let mut h = self
+            .latency_us_window
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        #[allow(clippy::len_zero)]
+        let out = if h.len() == 0 {
+            (None, None, None, None)
+        } else {
+            let p50 = h.value_at_quantile(0.50) as f64 / 1000.0;
+            let p90 = h.value_at_quantile(0.90) as f64 / 1000.0;
+            let p95 = h.value_at_quantile(0.95) as f64 / 1000.0;
+            let p99 = h.value_at_quantile(0.99) as f64 / 1000.0;
+            (Some(p50), Some(p90), Some(p95), Some(p99))
+        };
+
+        h.reset();
+        out
+    }
+
+    fn latency_snapshot_ms(&self) -> LatencySnapshotMs {
+        let h = self
+            .latency_us
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        #[allow(clippy::len_zero)]
+        if h.len() == 0 {
+            return LatencySnapshotMs::default();
+        }
+
+        let p50_ms = h.value_at_quantile(0.50) / 1000;
+        let p75_ms = h.value_at_quantile(0.75) / 1000;
+        let p90_ms = h.value_at_quantile(0.90) / 1000;
+        let p99_ms = h.value_at_quantile(0.99) / 1000;
+
+        let mean_ms = h.mean() / 1000.0;
+        let stdev_ms = h.stdev() / 1000.0;
+        let max_ms = h.max() / 1000;
+
+        let mut dist: Vec<(u8, u64)> = Vec::with_capacity(99);
+        for p in 1u8..=99u8 {
+            let q = (p as f64) / 100.0;
+            let v_ms = h.value_at_quantile(q) / 1000;
+            dist.push((p, v_ms));
+        }
+
+        LatencySnapshotMs {
+            mean_ms,
+            stdev_ms,
+            max_ms,
+            p50_ms,
+            p75_ms,
+            p90_ms,
+            p99_ms,
+            distribution_ms: dist,
+        }
+    }
+
+    fn checks_failed_total(&self) -> u64 {
+        self.checks.failed_total()
+    }
+
+    fn errors_snapshot(&self) -> HashMap<String, u64> {
+        self.checks.errors_snapshot()
+    }
+
+    fn failed_requests_total(&self) -> u64 {
+        self.http_errors_total.load(Ordering::Relaxed)
+            + self.status_4xx.load(Ordering::Relaxed)
+            + self.status_5xx.load(Ordering::Relaxed)
+            + self.grpc_errors_total.load(Ordering::Relaxed)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -268,6 +510,7 @@ impl Default for RunStats {
             }),
 
             rps_samples: Mutex::new(RpsAgg::default()),
+            scenario_stats: Mutex::new(HashMap::new()),
 
             metrics,
             metric_http_reqs,
@@ -292,6 +535,25 @@ impl RunStats {
         self.run_id
     }
 
+    fn scenario_stats(&self, scenario: &str) -> Arc<ScenarioStats> {
+        let mut map = self
+            .scenario_stats
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        if let Some(existing) = map.get(scenario) {
+            return existing.clone();
+        }
+
+        let key: Arc<str> = Arc::from(scenario);
+        let v = Arc::new(ScenarioStats::new());
+        map.insert(key, v.clone());
+        v
+    }
+
+    pub fn ensure_scenario(&self, scenario: &str) {
+        let _ = self.scenario_stats(scenario);
+    }
+
     pub fn metric_handle(&self, kind: MetricKind, name: &str) -> MetricHandle {
         self.metrics.handle(kind, name)
     }
@@ -314,6 +576,54 @@ impl RunStats {
 
     pub fn bytes_sent_total(&self) -> u64 {
         self.bytes_sent_total.load(Ordering::Relaxed)
+    }
+
+    pub fn requests_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .requests_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn http_requests_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .http_requests_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn grpc_requests_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .grpc_requests_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn bytes_received_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .bytes_received_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn bytes_sent_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .bytes_sent_total
+            .load(Ordering::Relaxed)
+    }
+
+    pub fn failed_requests_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario).failed_requests_total()
+    }
+
+    pub fn checks_failed_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario).checks_failed_total()
+    }
+
+    pub fn errors_snapshot_for_scenario(&self, scenario: &str) -> HashMap<String, u64> {
+        self.scenario_stats(scenario).errors_snapshot()
+    }
+
+    pub fn iterations_total_for_scenario(&self, scenario: &str) -> u64 {
+        self.scenario_stats(scenario)
+            .iterations_total
+            .load(Ordering::Relaxed)
     }
 
     pub fn checks_failed_total(&self) -> u64 {
@@ -403,12 +713,25 @@ impl RunStats {
         self.metric_iteration_duration.add(ms);
     }
 
+    pub fn record_iteration_scoped(&self, scenario: &str, elapsed: Duration) {
+        self.record_iteration(elapsed);
+        self.scenario_stats(scenario).record_iteration();
+    }
+
     pub fn record_rps_sample(&self, rps_now: f64) {
         let mut agg = self
             .rps_samples
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         agg.record(rps_now);
+    }
+
+    pub fn record_rps_sample_for_scenario(&self, scenario: &str, rps_now: f64) {
+        self.scenario_stats(scenario).record_rps_sample(rps_now);
+    }
+
+    pub fn req_per_sec_summary_for_scenario(&self, scenario: &str) -> (f64, f64, f64, f64) {
+        self.scenario_stats(scenario).req_per_sec_summary()
     }
 
     pub fn record_dropped_iterations(&self, n: u64) {
@@ -506,6 +829,41 @@ impl RunStats {
         let failed = transport_error || req.status.is_some_and(|s| s >= 400);
         self.metric_http_req_failed
             .add_bool_with_tags(failed, &merged_tags);
+    }
+
+    pub fn record_http_request_scoped(
+        &self,
+        scenario: &str,
+        req: HttpRequestMeta<'_>,
+        tags: &[(String, String)],
+    ) {
+        self.record_http_request(req, tags);
+
+        let st = self.scenario_stats(scenario);
+        let transport_error = req.transport_error_kind.is_some();
+        if transport_error {
+            st.record_http_error();
+            if let Some(kind) = req.transport_error_kind.map(|k| k.to_string()) {
+                st.checks.record(&format!("http_error:{kind}"), false);
+            } else {
+                st.checks.record("http_error:transport_error", false);
+            }
+        } else if let Some(status) = req.status {
+            st.record_http_status(status);
+            if status >= 400 {
+                st.checks.record(&format!("http_status:{status}"), false);
+            }
+        }
+
+        if req.bytes_received != 0 {
+            st.bytes_received_total
+                .fetch_add(req.bytes_received, Ordering::Relaxed);
+        }
+        if req.bytes_sent != 0 {
+            st.bytes_sent_total
+                .fetch_add(req.bytes_sent, Ordering::Relaxed);
+        }
+        st.record_latency(req.elapsed);
     }
 
     pub fn record_grpc_request(&self, req: GrpcRequestMeta<'_>, tags: &[(String, String)]) {
@@ -628,6 +986,42 @@ impl RunStats {
         hasher.finish()
     }
 
+    pub fn record_grpc_request_scoped(
+        &self,
+        scenario: &str,
+        req: GrpcRequestMeta<'_>,
+        tags: &[(String, String)],
+    ) {
+        self.record_grpc_request(req, tags);
+
+        let st = self.scenario_stats(scenario);
+        let transport_error = req.transport_error_kind.is_some();
+
+        if transport_error {
+            st.record_grpc_error();
+            if let Some(kind) = req.transport_error_kind.map(|k| k.to_string()) {
+                st.checks.record(&format!("grpc_error:{kind}"), false);
+            } else {
+                st.checks.record("grpc_error:transport_error", false);
+            }
+        } else if let Some(status) = req.status {
+            st.record_grpc_status(status);
+            if status != 0 {
+                st.checks.record(&format!("grpc_status:{status}"), false);
+            }
+        }
+
+        if req.bytes_received != 0 {
+            st.bytes_received_total
+                .fetch_add(req.bytes_received, Ordering::Relaxed);
+        }
+        if req.bytes_sent != 0 {
+            st.bytes_sent_total
+                .fetch_add(req.bytes_sent, Ordering::Relaxed);
+        }
+        st.record_latency(req.elapsed);
+    }
+
     pub fn check_handle(&self, name: &str) -> CheckHandle {
         let counters = {
             let mut map = self
@@ -661,6 +1055,10 @@ impl RunStats {
         }
     }
 
+    pub fn record_check_for_scenario(&self, scenario: &str, name: &str, ok: bool) {
+        self.scenario_stats(scenario).checks.record(name, ok);
+    }
+
     pub fn record_latency(&self, elapsed: Duration) {
         let us = elapsed.as_micros();
         if us == 0 {
@@ -677,7 +1075,7 @@ impl RunStats {
         let _ = h.window_us.record(value);
     }
 
-    pub fn take_latency_window_ms(&self) -> (Option<f64>, Option<f64>) {
+    pub fn take_latency_window_ms(&self) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
         let mut h = self
             .latency
             .lock()
@@ -685,15 +1083,28 @@ impl RunStats {
 
         #[allow(clippy::len_zero)]
         let out = if h.window_us.len() == 0 {
-            (None, None)
+            (None, None, None, None)
         } else {
             let p50 = h.window_us.value_at_quantile(0.50) as f64 / 1000.0;
+            let p90 = h.window_us.value_at_quantile(0.90) as f64 / 1000.0;
             let p95 = h.window_us.value_at_quantile(0.95) as f64 / 1000.0;
-            (Some(p50), Some(p95))
+            let p99 = h.window_us.value_at_quantile(0.99) as f64 / 1000.0;
+            (Some(p50), Some(p90), Some(p95), Some(p99))
         };
 
         h.window_us.reset();
         out
+    }
+
+    pub fn take_latency_window_ms_for_scenario(
+        &self,
+        scenario: &str,
+    ) -> (Option<f64>, Option<f64>, Option<f64>, Option<f64>) {
+        self.scenario_stats(scenario).take_latency_window_ms()
+    }
+
+    pub fn latency_snapshot_ms_for_scenario(&self, scenario: &str) -> LatencySnapshotMs {
+        self.scenario_stats(scenario).latency_snapshot_ms()
     }
 
     pub async fn summarize(&self, elapsed: Duration) -> RunSummary {

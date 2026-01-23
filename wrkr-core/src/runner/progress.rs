@@ -49,8 +49,17 @@ pub struct LiveMetrics {
     /// Failed checks breakdown by name.
     pub checks_failed: HashMap<String, u64>,
     pub latency_p50_ms_now: Option<f64>,
+    pub latency_p90_ms_now: Option<f64>,
     pub latency_p95_ms_now: Option<f64>,
+    pub latency_p99_ms_now: Option<f64>,
+    /// Failed requests/sec observed during the last progress interval.
+    pub failed_rps_now: f64,
+    /// Failed requests / total requests observed during the last progress interval (0..=1).
+    pub error_rate_now: f64,
+    /// Error breakdown during the last progress interval, keyed by status/code.
+    pub errors_now: HashMap<String, u64>,
     pub iterations_total: u64,
+    pub iterations_per_sec_now: f64,
 }
 
 #[derive(Debug, Clone)]

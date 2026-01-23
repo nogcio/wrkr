@@ -92,6 +92,7 @@ fn grpc_error_kind(err: &wrkr_core::GrpcError) -> wrkr_core::GrpcTransportErrorK
 
 pub fn create_grpc_module(
     lua: &Lua,
+    scenario: Arc<str>,
     script_path: Option<&Path>,
     max_vus: u64,
     stats: Arc<wrkr_core::runner::RunStats>,
@@ -104,6 +105,7 @@ pub fn create_grpc_module(
     let script_path = script_path.map(PathBuf::from);
 
     let new_fn = {
+        let scenario = scenario.clone();
         let stats = stats.clone();
         let script_path = script_path.clone();
         lua.create_function(move |lua, opts: Option<Table>| {
@@ -228,6 +230,7 @@ pub fn create_grpc_module(
             // invoke(full_method, req_tbl, opts?) -> res_tbl (never throws on runtime errors)
             let invoke_fn = {
                 let shared = shared.clone();
+                let scenario = scenario.clone();
                 let stats = stats.clone();
                 lua.create_async_function(
                     move |lua,
@@ -238,6 +241,7 @@ pub fn create_grpc_module(
                         Option<Table>,
                     )| {
                         let shared = shared.clone();
+                        let scenario = scenario.clone();
                         let stats = stats.clone();
                         async move {
                             let started = std::time::Instant::now();
@@ -320,7 +324,8 @@ pub fn create_grpc_module(
 
                             match res {
                                 Ok(res) => {
-                                    stats.record_grpc_request(
+                                    stats.record_grpc_request_scoped(
+                                        scenario.as_ref(),
                                         wrkr_core::runner::GrpcRequestMeta {
                                             method: wrkr_core::runner::GrpcCallKind::Unary,
                                             name: metric_name,
@@ -359,7 +364,8 @@ pub fn create_grpc_module(
                                     let kind = grpc_error_kind(&err);
 
                                     // best-effort metrics on transport errors
-                                    stats.record_grpc_request(
+                                    stats.record_grpc_request_scoped(
+                                        scenario.as_ref(),
                                         wrkr_core::runner::GrpcRequestMeta {
                                             method: wrkr_core::runner::GrpcCallKind::Unary,
                                             name: metric_name,

@@ -18,15 +18,18 @@ struct HttpRequestOptions {
 
 pub fn create_http_module(
     lua: &Lua,
+    scenario: Arc<str>,
     client: Arc<wrkr_core::HttpClient>,
     stats: Arc<wrkr_core::runner::RunStats>,
 ) -> Result<Table> {
     // http.get(url, opts?) -> { status = 200, body = "...", error? = "..." }
     let http_tbl = lua.create_table()?;
     let http_get = {
+        let scenario = scenario.clone();
         let client = client.clone();
         let stats = stats.clone();
         lua.create_async_function(move |lua, (url, opts): (String, Option<Table>)| {
+            let scenario = scenario.clone();
             let client = client.clone();
             let stats = stats.clone();
             async move {
@@ -54,7 +57,8 @@ pub fn create_http_module(
                 match res {
                     Ok(res) => {
                         let bytes_received = res.bytes_received;
-                        stats.record_http_request(
+                        stats.record_http_request_scoped(
+                            scenario.as_ref(),
                             wrkr_core::runner::HttpRequestMeta {
                                 method: "GET",
                                 name: &metric_name,
@@ -75,7 +79,8 @@ pub fn create_http_module(
                     }
                     Err(err) => {
                         let err_kind = err.transport_error_kind();
-                        stats.record_http_request(
+                        stats.record_http_request_scoped(
+                            scenario.as_ref(),
                             wrkr_core::runner::HttpRequestMeta {
                                 method: "GET",
                                 name: &metric_name,
@@ -102,10 +107,12 @@ pub fn create_http_module(
 
     // http.post(url, body, opts?)
     let http_post = {
+        let scenario = scenario.clone();
         let client = client.clone();
         let stats = stats.clone();
         lua.create_async_function(
             move |lua, (url, body, opts): (String, Value, Option<Table>)| {
+                let scenario = scenario.clone();
                 let client = client.clone();
                 let stats = stats.clone();
                 async move {
@@ -155,7 +162,8 @@ pub fn create_http_module(
                     match res {
                         Ok(res) => {
                             let bytes_received = res.bytes_received;
-                            stats.record_http_request(
+                            stats.record_http_request_scoped(
+                                scenario.as_ref(),
                                 wrkr_core::runner::HttpRequestMeta {
                                     method: "POST",
                                     name: &metric_name,
@@ -176,7 +184,8 @@ pub fn create_http_module(
                         }
                         Err(err) => {
                             let err_kind = err.transport_error_kind();
-                            stats.record_http_request(
+                            stats.record_http_request_scoped(
+                                scenario.as_ref(),
                                 wrkr_core::runner::HttpRequestMeta {
                                     method: "POST",
                                     name: &metric_name,
@@ -207,14 +216,17 @@ pub fn create_http_module(
 
 pub fn create_check_function(
     lua: &Lua,
+    scenario: Arc<str>,
     stats: Arc<wrkr_core::runner::RunStats>,
 ) -> Result<mlua::Function> {
     // check(res, { ["name"] = function(r) return ... end, ... }) -> bool
     let check_fn = {
+        let scenario = scenario.clone();
         let handles_cache: RefCell<HashMap<Box<str>, wrkr_core::runner::CheckHandle>> =
             RefCell::new(HashMap::new());
 
         lua.create_function(move |_lua, (res, checks): (Table, Table)| {
+            let scenario = scenario.clone();
             let mut all_ok = true;
             for pair in checks.pairs::<Value, Value>() {
                 let (k, v) = pair?;
@@ -240,6 +252,7 @@ pub fn create_check_function(
                             };
 
                             stats.record_check_handle(&handle, ok);
+                            stats.record_check_for_scenario(scenario.as_ref(), name, ok);
                         } else {
                             // Note: this allocates, but only for truly non-UTF8 keys.
                             let name_owned = s.to_string_lossy();
@@ -257,6 +270,7 @@ pub fn create_check_function(
                             };
 
                             stats.record_check_handle(&handle, ok);
+                            stats.record_check_for_scenario(scenario.as_ref(), name, ok);
                         }
                         if !ok {
                             all_ok = false;
@@ -276,6 +290,7 @@ pub fn create_check_function(
                         };
 
                         stats.record_check_handle(&handle, ok);
+                        stats.record_check_for_scenario(scenario.as_ref(), "<unnamed>", ok);
                         if !ok {
                             all_ok = false;
                         }

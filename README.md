@@ -11,6 +11,7 @@ Today, `wrkr` is script-driven via Lua (see [`wrkr-lua/README.md`](wrkr-lua/READ
 - Scenarios/executors: `constant-vus`, `ramping-vus`, `ramping-arrival-rate`
 - Per-run overrides via CLI flags (`--vus`, `--duration`, `--iterations`, `--env KEY=VALUE`)
 - Human summary output or JSON progress lines (NDJSON) via `--output`
+- Live dashboard server (HTML + WebSocket) via `--dashboard`
 
 ## Install
 
@@ -112,13 +113,37 @@ BASE_URL="https://example.com" cargo run --bin wrkr -- run examples/plaintext.lu
 ## Usage
 
 ```bash
-wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json]
+wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json] [--dashboard] [--dashboard-out <path>] [--dashboard-port <port> | --dashboard-bind <addr>]
 ```
 
 Notes:
 
 - CLI flags override values from the script's global `options` table.
 - Environment variables from the current process are visible to the script; use `--env KEY=VALUE` to add/override values for a single run.
+
+### Dashboard (local)
+
+Enable a local live dashboard server (table per scenario) and stream progress updates via WebSocket:
+
+```bash
+wrkr run examples/plaintext.lua --dashboard
+```
+
+`wrkr` prints a `dashboard=http://127.0.0.1:<port>` line to stderr; open it in your browser.
+
+Notes:
+
+- You can also enable the dashboard via env: `WRKR_DASHBOARD=1` (equivalent to `--dashboard`).
+- You can write a self-contained offline dashboard HTML via env: `WRKR_DASHBOARD_OUT=...` (equivalent to `--dashboard-out`).
+- The server binds to loopback only (e.g. `127.0.0.1`). Remote binding is intentionally rejected.
+- You can configure the bind via `--dashboard-bind` (use `:0` for an ephemeral port) or `--dashboard-port`.
+
+## Development rules (Cursor)
+
+This repository has explicit development rules for Cursor:
+
+- Canonical: `.github/copilot-instructions.md`
+- Cursor: `.cursorrules`
 
 Examples:
 

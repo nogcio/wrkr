@@ -1,11 +1,13 @@
 use anyhow::Context as _;
 use std::collections::BTreeMap;
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 
 use crate::cli::OutputFormat;
 use crate::cli::RunArgs;
 use crate::output;
+use crate::web::{Dashboard, WebUi, WebUiConfig};
 
 pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     let out = output::formatter(args.output);
@@ -15,8 +17,53 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     let cfg = run_config(&args);
     let script_path = Some(args.script.as_path());
 
+    if !args.dashboard
+        && args.dashboard_out.is_some()
+        && (args.dashboard_port.is_some() || args.dashboard_bind.is_some())
+    {
+        anyhow::bail!("--dashboard-port/--dashboard-bind requires --dashboard");
+    }
+
+    let dashboard_out = args.dashboard_out.clone();
+
+    let dashboard = if args.dashboard || dashboard_out.is_some() {
+        Some(Arc::new(Dashboard::new()))
+    } else {
+        None
+    };
+
+    let mut web_ui = if args.dashboard {
+        let bind_addr = dashboard_bind_addr(&args)?;
+        if !bind_addr.ip().is_loopback() {
+            anyhow::bail!(
+                "--dashboard-bind must be a loopback address (got {bind_addr}); remote binding is not supported"
+            );
+        }
+
+        let dashboard = dashboard
+            .as_ref()
+            .context("dashboard should be initialized when --dashboard is set")?
+            .clone();
+        let web = WebUi::start(WebUiConfig { bind_addr }, dashboard).await?;
+        eprintln!("dashboard={}", web.url());
+        Some(web)
+    } else {
+        None
+    };
+
     let (summary, threshold_violations) = match script_extension(&args.script) {
-        "lua" => run_lua_script(&args, &script, script_path, &env, cfg, out.as_ref()).await?,
+        "lua" => {
+            run_lua_script(
+                &args,
+                &script,
+                script_path,
+                &env,
+                cfg,
+                out.as_ref(),
+                dashboard.as_ref(),
+            )
+            .await?
+        }
         ext => anyhow::bail!(
             "unsupported script extension `{ext}` (expected .lua): {}",
             args.script.display()
@@ -24,6 +71,32 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     };
 
     out.print_summary(&summary)?;
+
+    if let Some(d) = &dashboard {
+        d.notify_done();
+    }
+
+    if let Some(path) = dashboard_out {
+        let dashboard = dashboard
+            .as_ref()
+            .context("dashboard should be initialized when --dashboard-out is set")?;
+        let html = dashboard.render_offline_html()?;
+        if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
+            tokio::fs::create_dir_all(parent).await.with_context(|| {
+                format!(
+                    "failed to create dashboard output dir: {}",
+                    parent.display()
+                )
+            })?;
+        }
+        tokio::fs::write(&path, html)
+            .await
+            .with_context(|| format!("failed to write dashboard html: {}", path.display()))?;
+    }
+
+    if let Some(d) = web_ui.take() {
+        d.shutdown().await;
+    }
 
     if summary.checks_failed > 0 || !threshold_violations.is_empty() {
         anyhow::bail!(
@@ -34,6 +107,15 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn dashboard_bind_addr(args: &RunArgs) -> anyhow::Result<SocketAddr> {
+    if let Some(addr) = args.dashboard_bind {
+        return Ok(addr);
+    }
+
+    let port = args.dashboard_port.unwrap_or(0);
+    Ok(SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), port))
 }
 
 async fn read_script(path: &Path) -> anyhow::Result<String> {
@@ -61,6 +143,7 @@ async fn run_lua_script(
     env: &wrkr_core::runner::EnvVars,
     cfg: wrkr_core::runner::RunConfig,
     out: &dyn output::OutputFormatter,
+    dashboard: Option<&Arc<Dashboard>>,
 ) -> anyhow::Result<(
     wrkr_core::runner::RunSummary,
     Vec<wrkr_core::runner::ThresholdViolation>,
@@ -87,7 +170,7 @@ async fn run_lua_script(
         wrkr_core::runner::scenarios_from_options(opts, cfg).context("invalid scenario config")?;
 
     out.print_header(args.script.as_path(), &scenarios);
-    let progress = out.progress();
+    let progress = compose_progress(out.progress(), dashboard.map(|d| d.progress_fn()));
 
     let summary = wrkr_core::runner::run_scenarios(
         script,
@@ -120,6 +203,20 @@ async fn run_lua_script(
     print_threshold_violations(&violations);
 
     Ok((summary, violations))
+}
+
+fn compose_progress(
+    out: Option<wrkr_core::runner::ProgressFn>,
+    web: Option<wrkr_core::runner::ProgressFn>,
+) -> Option<wrkr_core::runner::ProgressFn> {
+    match (out, web) {
+        (None, None) => None,
+        (Some(p), None) | (None, Some(p)) => Some(p),
+        (Some(p1), Some(p2)) => Some(Arc::new(move |u| {
+            (p1)(u.clone());
+            (p2)(u);
+        })),
+    }
 }
 
 fn run_lua_handle_summary(

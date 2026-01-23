@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>wrkr — progress</title>
+    <script src="/assets/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="/assets/dashboard.css" />
+    <script src="/assets/dashboard.js" defer></script>
+  </head>
+  <body data-max-points="{{ max_points }}">
+    <h1>wrkr — progress</h1>
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom: 8px;">
+      <div id="status" class="muted">connecting…</div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h2>RPS (requests/sec)</h2>
+        <canvas id="chartRps" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Latency percentiles (ms)</h2>
+        <canvas id="chartLat" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Error rate (%)</h2>
+        <canvas id="chartErrRate" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Active VUs</h2>
+        <canvas id="chartVus" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Iterations/sec</h2>
+        <canvas id="chartIters" height="120"></canvas>
+      </div>
+      <div class="card">
+        <h2>Network (bytes/sec)</h2>
+        <canvas id="chartNet" height="120"></canvas>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>scenario</th>
+          <th>exec</th>
+          <th class="right">elapsed</th>
+          <th class="right">vus</th>
+          <th class="right">rps</th>
+          <th class="right">p95(ms)</th>
+          <th class="right">err%</th>
+          <th class="right">iters/s</th>
+          <th class="right">req_total</th>
+          <th class="right">failed_req</th>
+          <th class="right">checks_failed</th>
+          <th class="right">rx/s</th>
+          <th class="right">tx/s</th>
+          <th class="right">dropped</th>
+        </tr>
+      </thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div style="margin-top: 12px;">
+      <div class="muted" style="margin-bottom: 6px;">Errors (last interval, by status/code)</div>
+      <table>
+        <thead>
+          <tr>
+            <th>scenario</th>
+            <th>error</th>
+            <th class="right">count</th>
+          </tr>
+        </thead>
+        <tbody id="errors"></tbody>
+      </table>
+    </div>
+  </body>
+</html>
+

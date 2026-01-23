@@ -27,6 +27,7 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                 script_path,
                 env_vars: &ctx.env,
                 vu_id: ctx.vu_id,
+                scenario: ctx.scenario.clone(),
                 max_vus: ctx.max_vus,
                 client: ctx.client,
                 stats: ctx.stats.clone(),
@@ -113,7 +114,8 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
             while gate.next() {
                 let started = Instant::now();
                 run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                ctx.stats.record_iteration(started.elapsed());
+                ctx.stats
+                    .record_iteration_scoped(ctx.scenario.as_ref(), started.elapsed());
             }
         }
         wrkr_core::runner::VuWork::RampingVus { schedule } => loop {
@@ -131,7 +133,8 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
 
             let started = Instant::now();
             run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-            ctx.stats.record_iteration(started.elapsed());
+            ctx.stats
+                .record_iteration_scoped(ctx.scenario.as_ref(), started.elapsed());
         },
         wrkr_core::runner::VuWork::RampingArrivalRate {
             schedule, pacer, ..
@@ -145,7 +148,8 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                     }
                     let started = Instant::now();
                     run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                    ctx.stats.record_iteration(started.elapsed());
+                    ctx.stats
+                        .record_iteration_scoped(ctx.scenario.as_ref(), started.elapsed());
                     continue;
                 }
 
@@ -161,7 +165,8 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
 
                 let started = Instant::now();
                 run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                ctx.stats.record_iteration(started.elapsed());
+                ctx.stats
+                    .record_iteration_scoped(ctx.scenario.as_ref(), started.elapsed());
             }
         }
     }

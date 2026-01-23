@@ -30,6 +30,7 @@ pub struct RegisterContext<'a> {
     pub script_path: Option<&'a Path>,
     pub env_vars: &'a wrkr_core::runner::EnvVars,
     pub vu_id: u64,
+    pub scenario: Arc<str>,
     pub max_vus: u64,
     pub client: Arc<wrkr_core::HttpClient>,
     pub stats: Arc<wrkr_core::runner::RunStats>,
@@ -37,9 +38,20 @@ pub struct RegisterContext<'a> {
 }
 
 pub fn register(lua: &Lua, ctx: RegisterContext<'_>) -> Result<()> {
-    http::register_runtime(lua, ctx.client.clone(), ctx.stats.clone())?;
-    grpc::register_runtime(lua, ctx.script_path, ctx.max_vus, ctx.stats.clone())?;
-    check::register_runtime(lua, ctx.stats.clone())?;
+    http::register_runtime(
+        lua,
+        ctx.scenario.clone(),
+        ctx.client.clone(),
+        ctx.stats.clone(),
+    )?;
+    grpc::register_runtime(
+        lua,
+        ctx.scenario.clone(),
+        ctx.script_path,
+        ctx.max_vus,
+        ctx.stats.clone(),
+    )?;
+    check::register_runtime(lua, ctx.scenario.clone(), ctx.stats.clone())?;
     metrics::register_runtime(lua, ctx.stats.clone())?;
     env::register_runtime(lua, ctx.env_vars)?;
     fs::register(lua, ctx.script_path)?;
