@@ -46,7 +46,9 @@ jobs:
             runner: ubuntu-latest
           - platform: linux/arm64
             platform_slug: linux-arm64
-            runner: ubuntu-latest
+            # Use the built-in self-hosted labels so any macOS ARM64 runner can pick this up.
+            # Runner should have Docker installed and running (Docker Desktop, Colima, etc.).
+            runner: [self-hosted, macOS, ARM64]
 
     steps:
       - name: Checkout repository
