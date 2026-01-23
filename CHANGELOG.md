@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.5] - 2026-01-23
+
+### Added
+- gRPC: add a message encoder so unary requests can be pre-encoded (Lua: `grpc.Client:encode`).
+
+### Changed
+- Tools: update the WFB gRPC aggregation perf script to use pre-encoded request bytes.
+
 ## [0.0.4] - 2026-01-23
 
 ### Changed
