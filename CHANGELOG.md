@@ -13,6 +13,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.4] - 2026-01-23
+
+### Changed
+- gRPC: improve request/response encoding/decoding performance by using a bytes-based gRPC codec and a custom protobuf wire encoder/decoder for `wrkr_value::Value`.
+- Tools: extend `wrkr-tools-compare-perf` with a WFB gRPC aggregation case and an optional cross-protocol ratio check.
+
 ## [0.0.3] - 2026-01-23
 
 ### Added

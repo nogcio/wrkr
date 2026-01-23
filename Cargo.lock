@@ -2255,7 +2255,7 @@ checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
 
 [[package]]
 name = "wrkr"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -2272,7 +2272,7 @@ dependencies = [
 
 [[package]]
 name = "wrkr-core"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "ahash",
  "bytes",
@@ -2295,7 +2295,7 @@ dependencies = [
 
 [[package]]
 name = "wrkr-lua"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "bytes",
  "humantime",
@@ -2314,7 +2314,7 @@ dependencies = [
 
 [[package]]
 name = "wrkr-testserver"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "axum",
@@ -2330,7 +2330,7 @@ dependencies = [
 
 [[package]]
 name = "wrkr-tools-compare-perf"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "anyhow",
  "clap",
@@ -2340,7 +2340,7 @@ dependencies = [
 
 [[package]]
 name = "wrkr-value"
-version = "0.0.3"
+version = "0.0.4"
 dependencies = [
  "ahash",
  "bytes",
