@@ -31,6 +31,8 @@ local statuses = {
   OrderStatus.PENDING,
 }
 
+local client
+
 local function init_zero_map(keys)
   local out = {}
   for _, k in ipairs(keys) do
@@ -86,9 +88,18 @@ local function generate_case()
     end
   end
 
+  local req_bytes, err = client:encode(
+    "AnalyticsService/AggregateOrders",
+    { orders = orders }
+  )
+  if req_bytes == nil then
+    error(err or "failed to encode request")
+  end
+
   return {
     client_id = client_id,
     orders = orders,
+    req_bytes = req_bytes,
     expected_processed = expected_processed,
     expected_results = expected_results,
     expected_category_stats = expected_category_stats,
@@ -105,7 +116,7 @@ if target == nil then
   error("GRPC_TARGET is required")
 end
 
-local client = grpc.Client.new()
+client = grpc.Client.new()
 local ok_load = pcall(function()
   client:load({ "tools/perf/protos" }, "tools/perf/protos/analytics.proto")
 end)
@@ -129,7 +140,7 @@ function Default()
 
   local res = client:invoke(
     "AnalyticsService/AggregateOrders",
-    { orders = data.orders },
+    data.req_bytes,
     {
       name = "gRPC AggregateOrders (wfb)",
       metadata = {

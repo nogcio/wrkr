@@ -25,27 +25,52 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
             return Err(err("value too deep"));
         }
 
-        #[derive(Debug, Clone)]
-        enum EntryKey {
-            Int(i64),
-            Str(Arc<str>),
-            Bool(bool),
-        }
-
-        struct Entry {
-            key: EntryKey,
-            value: Option<wrkr_value::Value>,
-        }
-
         // Track whether we have *only* positive integer keys (1..=N), which allows Array.
+        // We build the array incrementally and only validate contiguity at the end.
         let mut only_pos_int_keys = true;
         let mut max_idx: usize = 0;
-        let mut array_entry_idx: Vec<Option<usize>> = Vec::new();
+        let mut array_values: Vec<Option<wrkr_value::Value>> = Vec::new();
 
+        // Prefer Object when keys are only strings. If we see any other key type, we
+        // lazily upgrade to Map (and migrate any accumulated Object/Array entries).
         let mut saw_string_key = false;
         let mut saw_other_key = false;
 
-        let mut entries: Vec<Entry> = Vec::new();
+        let mut object_items: Option<wrkr_value::ObjectMap> = Some(wrkr_value::ObjectMap::new());
+        let mut map_items: Option<wrkr_value::MapMap> = None;
+
+        fn ensure_map<'a>(
+            map_items: &'a mut Option<wrkr_value::MapMap>,
+            object_items: &mut Option<wrkr_value::ObjectMap>,
+            array_values: &mut [Option<wrkr_value::Value>],
+        ) -> std::result::Result<&'a mut wrkr_value::MapMap, mlua::Error> {
+            if map_items.is_none() {
+                let mut m = wrkr_value::MapMap::new();
+
+                if let Some(obj) = object_items.take() {
+                    m.reserve(obj.len());
+                    for (k, v) in obj {
+                        m.insert(wrkr_value::MapKey::String(k), v);
+                    }
+                }
+
+                if !array_values.is_empty() {
+                    m.reserve(array_values.len());
+                    for (idx, v) in array_values.iter_mut().enumerate() {
+                        if let Some(v) = v.take() {
+                            m.insert(wrkr_value::MapKey::U64((idx + 1) as u64), v);
+                        }
+                    }
+                }
+
+                *map_items = Some(m);
+            }
+
+            match map_items.as_mut() {
+                Some(m) => Ok(m),
+                None => Err(err("internal: failed to initialize map")),
+            }
+        }
 
         for pair in t.pairs::<Value, Value>() {
             let (k, v) = pair?;
@@ -54,67 +79,86 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
             match k {
                 Value::Integer(i) => {
                     saw_other_key = true;
-                    let entry_idx = entries.len();
-                    entries.push(Entry {
-                        key: EntryKey::Int(i),
-                        value: Some(v),
-                    });
 
-                    if i >= 1 {
+                    if i >= 1 && only_pos_int_keys && map_items.is_none() {
                         let idx = i as usize;
                         max_idx = max_idx.max(idx);
-                        if array_entry_idx.len() < idx {
-                            array_entry_idx.resize_with(idx, || None);
+                        if array_values.len() < idx {
+                            array_values.resize_with(idx, || None);
                         }
-                        if array_entry_idx[idx - 1].is_some() {
+                        if array_values[idx - 1].is_some() {
                             return Err(err("duplicate array index"));
                         }
-                        array_entry_idx[idx - 1] = Some(entry_idx);
+                        array_values[idx - 1] = Some(v);
                     } else {
-                        only_pos_int_keys = false;
+                        if i < 1 {
+                            only_pos_int_keys = false;
+                        }
+
+                        let m = ensure_map(&mut map_items, &mut object_items, &mut array_values)?;
+                        let mk = if i >= 0 {
+                            wrkr_value::MapKey::U64(i as u64)
+                        } else {
+                            wrkr_value::MapKey::I64(i)
+                        };
+                        m.insert(mk, v);
                     }
                 }
                 Value::String(s) => {
-                    only_pos_int_keys = false;
                     saw_string_key = true;
 
-                    let key = Arc::<str>::from(s.to_string_lossy().to_string());
-                    entries.push(Entry {
-                        key: EntryKey::Str(key),
-                        value: Some(v),
-                    });
+                    // Once we see a string key, this is not an Array.
+                    only_pos_int_keys = false;
+
+                    let key = match s.to_str() {
+                        Ok(st) => Arc::<str>::from(st.as_ref()),
+                        Err(_) => Arc::<str>::from(s.to_string_lossy().to_string()),
+                    };
+
+                    let had_array_values = !array_values.is_empty();
+                    if let Some(m) = map_items.as_mut() {
+                        m.insert(wrkr_value::MapKey::String(key), v);
+                    } else if had_array_values {
+                        // We started as an Array but then encountered a string key; upgrade.
+                        let m = ensure_map(&mut map_items, &mut object_items, &mut array_values)?;
+                        m.insert(wrkr_value::MapKey::String(key), v);
+                    } else if let Some(obj) = object_items.as_mut() {
+                        obj.insert(key, v);
+                    } else {
+                        return Err(err("internal: object map missing"));
+                    }
                 }
                 Value::Boolean(b) => {
-                    only_pos_int_keys = false;
                     saw_other_key = true;
-                    entries.push(Entry {
-                        key: EntryKey::Bool(b),
-                        value: Some(v),
-                    });
+                    only_pos_int_keys = false;
+
+                    let m = ensure_map(&mut map_items, &mut object_items, &mut array_values)?;
+                    m.insert(wrkr_value::MapKey::Bool(b), v);
                 }
                 _ => {
                     // Unsupported key types are ignored for value storage, but they do
                     // affect array/object detection (matches previous behavior).
-                    only_pos_int_keys = false;
                     saw_other_key = true;
+                    only_pos_int_keys = false;
                 }
             }
+        }
+
+        if let Some(map_items) = map_items {
+            return Ok(wrkr_value::Value::Map(map_items));
         }
 
         if only_pos_int_keys {
             if max_idx == 0 {
                 return Ok(wrkr_value::Value::Array(Vec::new()));
             }
-            if array_entry_idx.len() != max_idx || array_entry_idx.iter().any(Option::is_none) {
+            if array_values.len() != max_idx || array_values.iter().any(Option::is_none) {
                 return Err(err("sparse arrays are not supported"));
             }
 
             let mut out = Vec::with_capacity(max_idx);
-            for entry_idx in array_entry_idx {
-                let Some(entry_idx) = entry_idx else {
-                    return Err(err("sparse arrays are not supported"));
-                };
-                let Some(v) = entries[entry_idx].value.take() else {
+            for v in array_values {
+                let Some(v) = v else {
                     return Err(err("sparse arrays are not supported"));
                 };
                 out.push(v);
@@ -122,43 +166,12 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
             return Ok(wrkr_value::Value::Array(out));
         }
 
-        // Prefer Object if keys are only strings.
         if saw_string_key && !saw_other_key {
-            let mut object_items: wrkr_value::ObjectMap = wrkr_value::ObjectMap::new();
-            object_items.reserve(entries.len());
-            for mut e in entries {
-                let EntryKey::Str(k) = e.key else {
-                    continue;
-                };
-                if let Some(v) = e.value.take() {
-                    object_items.insert(k, v);
-                }
-            }
-            return Ok(wrkr_value::Value::Object(object_items));
+            return Ok(wrkr_value::Value::Object(object_items.unwrap_or_default()));
         }
 
-        let mut map_items: wrkr_value::MapMap = wrkr_value::MapMap::new();
-        map_items.reserve(entries.len());
-        for mut e in entries {
-            let Some(v) = e.value.take() else {
-                continue;
-            };
-
-            let mk = match e.key {
-                EntryKey::Int(i) => {
-                    if i >= 0 {
-                        wrkr_value::MapKey::U64(i as u64)
-                    } else {
-                        wrkr_value::MapKey::I64(i)
-                    }
-                }
-                EntryKey::Str(s) => wrkr_value::MapKey::String(s),
-                EntryKey::Bool(b) => wrkr_value::MapKey::Bool(b),
-            };
-            map_items.insert(mk, v);
-        }
-
-        Ok(wrkr_value::Value::Map(map_items))
+        // Mixed/unsupported keys but no stored entries.
+        Ok(wrkr_value::Value::Map(wrkr_value::MapMap::new()))
     }
 
     fn lua_to_value_inner(
@@ -177,8 +190,11 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
             Value::Integer(v) => wrkr_value::Value::I64(v),
             Value::Number(v) => wrkr_value::Value::F64(v),
             Value::String(s) => {
-                let s = s.to_string_lossy().to_string();
-                wrkr_value::Value::String(Arc::<str>::from(s))
+                let s = match s.to_str() {
+                    Ok(st) => Arc::<str>::from(st.as_ref()),
+                    Err(_) => Arc::<str>::from(s.to_string_lossy().to_string()),
+                };
+                wrkr_value::Value::String(s)
             }
             Value::Table(t) => table_to_value(lua, t, depth - 1, int64_repr)?,
             _ => return Err(err("unsupported value type")),

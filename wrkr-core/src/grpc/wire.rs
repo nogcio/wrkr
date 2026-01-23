@@ -1,7 +1,7 @@
 use bytes::Buf as _;
 use bytes::BufMut as _;
 
-use crate::proto::{GrpcFieldShape, GrpcMethod, GrpcOutputFieldMeta, GrpcValueKind};
+use crate::proto::{GrpcFieldShape, GrpcMethod, GrpcValueKind};
 
 pub(crate) fn encode_value_for_method(
     method: &GrpcMethod,
@@ -16,7 +16,7 @@ pub(crate) fn decode_value_for_method(
     method: &GrpcMethod,
     bytes: bytes::Bytes,
 ) -> std::result::Result<wrkr_value::Value, String> {
-    decode_message(method.output_fields(), bytes)
+    decode_message_for_method(method, bytes)
 }
 
 fn encode_message(
@@ -266,20 +266,14 @@ fn encode_scalar_field(
     Ok(())
 }
 
-fn decode_message(
-    fields: &[GrpcOutputFieldMeta],
+fn decode_message_for_method(
+    method: &GrpcMethod,
     bytes: bytes::Bytes,
 ) -> std::result::Result<wrkr_value::Value, String> {
-    let mut by_number: std::collections::HashMap<u32, &GrpcOutputFieldMeta> =
-        std::collections::HashMap::with_capacity(fields.len());
-    for f in fields {
-        let n = f.field.number();
-        if n != 0 {
-            by_number.insert(n, f);
-        }
-    }
+    let fields = method.output_fields();
+    let by_number = method.output_field_index_by_number();
 
-    let mut src = bytes.clone();
+    let mut src = bytes;
     let mut out: wrkr_value::ObjectMap = wrkr_value::ObjectMap::with_capacity(fields.len());
 
     while src.has_remaining() {
@@ -291,13 +285,64 @@ fn decode_message(
         let field_number = (tag >> 3) as u32;
         let wire_type = WireType::try_from((tag & 0x7) as u8)?;
 
-        let Some(meta) = by_number.get(&field_number) else {
+        let Some(&idx) = by_number.get(&field_number) else {
             skip_value(wire_type, &mut src)?;
             continue;
         };
 
-        let v = decode_field_value(&meta.shape, wire_type, &mut src)?;
-        merge_decoded_field(&mut out, &meta.name, &meta.shape, v)?;
+        let meta = &fields[idx];
+
+        if let GrpcFieldShape::Map {
+            key_kind,
+            value_kind,
+        } = &meta.shape
+        {
+            decode_map_entry_into_object(
+                &mut out, &meta.name, key_kind, value_kind, wire_type, &mut src,
+            )?;
+        } else {
+            let v = decode_field_value(&meta.shape, wire_type, &mut src)?;
+            merge_decoded_field(&mut out, &meta.name, &meta.shape, v)?;
+        }
+    }
+
+    Ok(wrkr_value::Value::Object(out))
+}
+
+fn decode_message_for_meta(
+    meta: &crate::proto::GrpcMessageMeta,
+    bytes: bytes::Bytes,
+) -> std::result::Result<wrkr_value::Value, String> {
+    let by_number = meta.fields_by_number();
+    let mut src = bytes;
+    let mut out: wrkr_value::ObjectMap = wrkr_value::ObjectMap::with_capacity(by_number.len());
+
+    while src.has_remaining() {
+        let tag = read_varint(&mut src)?;
+        if tag == 0 {
+            return Err("invalid protobuf tag 0".to_string());
+        }
+
+        let field_number = (tag >> 3) as u32;
+        let wire_type = WireType::try_from((tag & 0x7) as u8)?;
+
+        let Some((name, shape)) = by_number.get(&field_number) else {
+            skip_value(wire_type, &mut src)?;
+            continue;
+        };
+
+        if let GrpcFieldShape::Map {
+            key_kind,
+            value_kind,
+        } = shape
+        {
+            decode_map_entry_into_object(
+                &mut out, name, key_kind, value_kind, wire_type, &mut src,
+            )?;
+        } else {
+            let v = decode_field_value(shape, wire_type, &mut src)?;
+            merge_decoded_field(&mut out, name, shape, v)?;
+        }
     }
 
     Ok(wrkr_value::Value::Object(out))
@@ -323,7 +368,7 @@ fn merge_decoded_field(
                     items.push(v);
                 }
                 Some(existing) => {
-                    let prev = existing.clone();
+                    let prev = std::mem::replace(existing, wrkr_value::Value::Null);
                     *existing = wrkr_value::Value::Array(vec![prev, v]);
                 }
             }
@@ -339,9 +384,8 @@ fn merge_decoded_field(
                     out.insert(name.clone(), wrkr_value::Value::Map(new_map));
                 }
                 Some(wrkr_value::Value::Map(existing)) => {
-                    for (k, v) in new_map.drain() {
-                        existing.insert(k, v);
-                    }
+                    existing.reserve(new_map.len());
+                    existing.extend(new_map.drain());
                 }
                 Some(existing) => {
                     *existing = wrkr_value::Value::Map(new_map);
@@ -414,6 +458,41 @@ fn decode_map_entry(
     let key = key.ok_or_else(|| "missing map entry key".to_string())?;
     let value = value.ok_or_else(|| "missing map entry value".to_string())?;
     Ok((key, value))
+}
+
+fn decode_map_entry_into_object(
+    out: &mut wrkr_value::ObjectMap,
+    name: &std::sync::Arc<str>,
+    key_kind: &prost_reflect::Kind,
+    value_kind: &GrpcValueKind,
+    wire_type: WireType,
+    src: &mut bytes::Bytes,
+) -> std::result::Result<(), String> {
+    if wire_type != WireType::Len {
+        return Err("map field must be length-delimited".to_string());
+    }
+
+    let bytes = read_len_delimited(src)?;
+    let (k, v) = decode_map_entry(key_kind, value_kind, bytes)?;
+
+    match out.get_mut(name) {
+        None => {
+            let mut map: wrkr_value::MapMap = wrkr_value::MapMap::with_capacity(1);
+            map.insert(k, v);
+            out.insert(name.clone(), wrkr_value::Value::Map(map));
+            Ok(())
+        }
+        Some(wrkr_value::Value::Map(existing)) => {
+            existing.insert(k, v);
+            Ok(())
+        }
+        Some(existing) => {
+            let mut map: wrkr_value::MapMap = wrkr_value::MapMap::with_capacity(1);
+            map.insert(k, v);
+            *existing = wrkr_value::Value::Map(map);
+            Ok(())
+        }
+    }
 }
 
 fn decode_map_key_value(
@@ -537,43 +616,7 @@ fn decode_scalar_value(
                 return Err("message must be len".to_string());
             }
             let b = read_len_delimited(src)?;
-            // Decode full message using its descriptor fields.
-            // NOTE: this uses dynamic output field list (by name) by constructing a fake output_fields list.
-            // For this prototype we reuse meta.fields_by_name and decode as an object by field number.
-            let mut fields: Vec<(u32, std::sync::Arc<str>, GrpcFieldShape)> = Vec::new();
-            for (name, fmeta) in meta.fields_by_name() {
-                let n = fmeta.field.number();
-                if n != 0 {
-                    fields.push((n, name.clone(), fmeta.shape.clone()));
-                }
-            }
-
-            let mut by_number: std::collections::HashMap<
-                u32,
-                (std::sync::Arc<str>, GrpcFieldShape),
-            > = std::collections::HashMap::with_capacity(fields.len());
-            for (n, name, shape) in fields {
-                by_number.insert(n, (name, shape));
-            }
-
-            let mut src2 = b.clone();
-            let mut out: wrkr_value::ObjectMap = wrkr_value::ObjectMap::new();
-            while src2.has_remaining() {
-                let tag = read_varint(&mut src2)?;
-                if tag == 0 {
-                    return Err("invalid protobuf tag 0".to_string());
-                }
-                let field_number = (tag >> 3) as u32;
-                let wt = WireType::try_from((tag & 0x7) as u8)?;
-                let Some((name, shape)) = by_number.get(&field_number) else {
-                    skip_value(wt, &mut src2)?;
-                    continue;
-                };
-                let v = decode_field_value(shape, wt, &mut src2)?;
-                merge_decoded_field(&mut out, name, shape, v)?;
-            }
-
-            Ok(wrkr_value::Value::Object(out))
+            decode_message_for_meta(meta.as_ref(), b)
         }
     }
 }

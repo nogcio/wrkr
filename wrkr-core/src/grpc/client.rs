@@ -19,6 +19,92 @@ pub struct GrpcClient {
 }
 
 impl GrpcClient {
+    async fn unary_inner(
+        &self,
+        method: &GrpcMethod,
+        req_bytes: bytes::Bytes,
+        opts: InvokeOptions,
+    ) -> Result<UnaryResult> {
+        let started = Instant::now();
+
+        let path = method.path().clone();
+
+        let bytes_sent = req_bytes.len() as u64;
+        let mut request = tonic::Request::new(req_bytes);
+
+        if let Some(timeout) = opts.timeout {
+            request.set_timeout(timeout);
+        }
+
+        for (k, v) in opts.metadata {
+            let key =
+                MetadataKey::from_bytes(k.as_bytes()).map_err(|_| Error::MetadataKey(k.clone()))?;
+            let value = MetadataValue::try_from(v.clone())
+                .map_err(|_| Error::MetadataValue { key: k, value: v })?;
+            request.metadata_mut().insert(key, value);
+        }
+
+        let i = self.rr.fetch_add(1, Ordering::Relaxed);
+        // Invariant: connect_pooled ensures at least 1 channel.
+        let channel = self.channels[i % self.channels.len()].clone();
+        let mut grpc = tonic::client::Grpc::new(channel);
+        let codec = BytesCodec;
+
+        let res = async {
+            grpc.ready()
+                .await
+                .map_err(|e| tonic::Status::unknown(format!("Service was not ready: {e}")))?;
+            grpc.unary(request, path, codec).await
+        }
+        .await;
+
+        let elapsed = started.elapsed();
+
+        match res {
+            Ok(res) => {
+                let headers = metadata_to_pairs(res.metadata());
+                let decoded = res.into_inner();
+                let bytes_received = decoded.bytes.len() as u64;
+
+                let response = decode_value_for_method(method, decoded.bytes.clone())
+                    .map_err(Error::Decode)?;
+
+                Ok(UnaryResult {
+                    ok: true,
+                    status: Some(0),
+                    message: None,
+                    error: None,
+                    transport_error_kind: None,
+                    response,
+                    headers,
+                    trailers: Vec::new(),
+                    elapsed,
+                    bytes_sent,
+                    bytes_received,
+                })
+            }
+            Err(status) => {
+                // Non-OK gRPC status is a normal protocol outcome.
+                let code = status.code() as u16;
+                let trailers = metadata_to_pairs(status.metadata());
+
+                Ok(UnaryResult {
+                    ok: false,
+                    status: Some(code),
+                    message: Some(status.message().to_string()),
+                    error: Some(status.to_string()),
+                    transport_error_kind: None,
+                    response: wrkr_value::Value::Null,
+                    headers: Vec::new(),
+                    trailers,
+                    elapsed,
+                    bytes_sent,
+                    bytes_received: 0,
+                })
+            }
+        }
+    }
+
     pub async fn connect(target: &str, opts: ConnectOptions) -> Result<Self> {
         Self::connect_pooled(target, opts, 1).await
     }
@@ -90,85 +176,16 @@ impl GrpcClient {
         req: wrkr_value::Value,
         opts: InvokeOptions,
     ) -> Result<UnaryResult> {
-        let started = Instant::now();
-
-        let path = method.path().clone();
-
         let bytes = encode_value_for_method(method, &req).map_err(Error::Encode)?;
+        self.unary_inner(method, bytes, opts).await
+    }
 
-        let bytes_sent = bytes.len() as u64;
-
-        let mut request = tonic::Request::new(bytes);
-
-        if let Some(timeout) = opts.timeout {
-            request.set_timeout(timeout);
-        }
-
-        for (k, v) in opts.metadata {
-            let key =
-                MetadataKey::from_bytes(k.as_bytes()).map_err(|_| Error::MetadataKey(k.clone()))?;
-            let value = MetadataValue::try_from(v.clone())
-                .map_err(|_| Error::MetadataValue { key: k, value: v })?;
-            request.metadata_mut().insert(key, value);
-        }
-
-        let i = self.rr.fetch_add(1, Ordering::Relaxed);
-        // Invariant: connect_pooled ensures at least 1 channel.
-        let channel = self.channels[i % self.channels.len()].clone();
-        let mut grpc = tonic::client::Grpc::new(channel);
-        let codec = BytesCodec;
-
-        let res = async {
-            grpc.ready()
-                .await
-                .map_err(|e| tonic::Status::unknown(format!("Service was not ready: {e}")))?;
-            grpc.unary(request, path, codec).await
-        }
-        .await;
-        let elapsed = started.elapsed();
-
-        match res {
-            Ok(res) => {
-                let headers = metadata_to_pairs(res.metadata());
-                let decoded = res.into_inner();
-                let bytes_received = decoded.bytes.len() as u64;
-
-                let response = decode_value_for_method(method, decoded.bytes.clone())
-                    .map_err(Error::Decode)?;
-
-                Ok(UnaryResult {
-                    ok: true,
-                    status: Some(0),
-                    message: None,
-                    error: None,
-                    transport_error_kind: None,
-                    response,
-                    headers,
-                    trailers: Vec::new(),
-                    elapsed,
-                    bytes_sent,
-                    bytes_received,
-                })
-            }
-            Err(status) => {
-                // Non-OK gRPC status is a normal protocol outcome.
-                let code = status.code() as u16;
-                let trailers = metadata_to_pairs(status.metadata());
-
-                Ok(UnaryResult {
-                    ok: false,
-                    status: Some(code),
-                    message: Some(status.message().to_string()),
-                    error: Some(status.to_string()),
-                    transport_error_kind: None,
-                    response: wrkr_value::Value::Null,
-                    headers: Vec::new(),
-                    trailers,
-                    elapsed,
-                    bytes_sent,
-                    bytes_received: 0,
-                })
-            }
-        }
+    pub async fn unary_bytes(
+        &self,
+        method: &GrpcMethod,
+        req_bytes: bytes::Bytes,
+        opts: InvokeOptions,
+    ) -> Result<UnaryResult> {
+        self.unary_inner(method, req_bytes, opts).await
     }
 }

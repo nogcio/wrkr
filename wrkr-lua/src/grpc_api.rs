@@ -225,7 +225,9 @@ pub fn create_grpc_module(
                 )?
             };
 
-            // invoke(full_method, req_tbl, opts?) -> res_tbl (never throws on runtime errors)
+            // invoke(full_method, req, opts?) -> res_tbl (never throws on runtime errors)
+            // If `req` is a Lua string, it's treated as protobuf-encoded request bytes.
+            // Otherwise `req` is converted from Lua -> wrkr_value::Value and encoded.
             let invoke_fn = {
                 let shared = shared.clone();
                 let stats = stats.clone();
@@ -281,6 +283,7 @@ pub fn create_grpc_module(
                             let mut name: Option<String> = None;
                             let mut timeout: Option<Duration> = None;
                             let mut metadata: Vec<(String, String)> = Vec::new();
+                            let mut int64_repr = Int64Repr::Integer;
 
                             if let Some(opts) = opts {
                                 tags = parse_tags(&opts).map_err(mlua::Error::external)?;
@@ -289,6 +292,18 @@ pub fn create_grpc_module(
                                     timeout = Some(parse_duration(&timeout_str)?);
                                 }
                                 metadata = parse_metadata(&opts).map_err(mlua::Error::external)?;
+
+                                if let Ok(int64_str) = opts.get::<String>("int64") {
+                                    int64_repr = match int64_str.as_str() {
+                                        "integer" => Int64Repr::Integer,
+                                        "string" => Int64Repr::String,
+                                        _ => {
+                                            return Err(mlua::Error::external(
+                                                "grpc invoke opts.int64 must be 'integer' or 'string'",
+                                            ));
+                                        }
+                                    };
+                                }
                             }
 
                             let metric_name = name.as_deref().unwrap_or(full_method_str);
@@ -299,24 +314,33 @@ pub fn create_grpc_module(
                                 tags.push(("group".to_string(), group));
                             }
 
-                            let req_value = match lua_to_value(&lua, req, Int64Repr::String) {
-                                Ok(v) => v,
-                                Err(err) => {
-                                    t.set("ok", false)?;
-                                    t.set("status", Value::Nil)?;
-                                    t.set("error_kind", "encode")?;
-                                    t.set("error", err.to_string())?;
-                                    return Ok(t);
+                            let invoke_opts = wrkr_core::GrpcInvokeOptions { timeout, metadata };
+
+                            let res = match req {
+                                Value::String(req_bytes) => {
+                                    let bytes = bytes::Bytes::copy_from_slice(
+                                        req_bytes.as_bytes().as_ref(),
+                                    );
+                                    client
+                                        .unary_bytes(method.as_ref(), bytes, invoke_opts)
+                                        .await
+                                }
+                                other => {
+                                    let req_value =
+                                        match lua_to_value(&lua, other, Int64Repr::String) {
+                                            Ok(v) => v,
+                                            Err(err) => {
+                                                t.set("ok", false)?;
+                                                t.set("status", Value::Nil)?;
+                                                t.set("error_kind", "encode")?;
+                                                t.set("error", err.to_string())?;
+                                                return Ok(t);
+                                            }
+                                        };
+
+                                    client.unary(method.as_ref(), req_value, invoke_opts).await
                                 }
                             };
-
-                            let res = client
-                                .unary(
-                                    method.as_ref(),
-                                    req_value,
-                                    wrkr_core::GrpcInvokeOptions { timeout, metadata },
-                                )
-                                .await;
 
                             match res {
                                 Ok(res) => {
@@ -349,7 +373,8 @@ pub fn create_grpc_module(
                                         t.set("error_kind", kind.to_string())?;
                                     }
 
-                                    let resp = value_to_lua(&lua, &res.response, Int64Repr::String)
+                                    let resp =
+                                        value_to_lua(&lua, &res.response, int64_repr)
                                         .map_err(mlua::Error::external)?;
                                     t.set("response", resp)?;
 
@@ -384,9 +409,65 @@ pub fn create_grpc_module(
                 )?
             };
 
+            // encode(full_method, req) -> bytes | (nil, err)
+            // Encodes a request message to protobuf bytes, allowing callers to cache/reuse the
+            // bytes across many invocations (avoids repeated Lua->Value->protobuf work).
+            let encode_fn = {
+                let shared = shared.clone();
+                lua.create_function(
+                    move |lua, (_this, full_method, req): (Table, mlua::String, Value)| {
+                        let full_method =
+                            match full_method.to_str() {
+                                Ok(s) => s,
+                                Err(_) => {
+                                    return Ok(mlua::MultiValue::from_vec(vec![
+                                        Value::Nil,
+                                        Value::String(lua.create_string(
+                                            "grpc client: method name must be utf-8",
+                                        )?),
+                                    ]));
+                                }
+                            };
+
+                        let method = match shared.method(full_method.as_ref()) {
+                            Ok(m) => m,
+                            Err(_) => {
+                                return Ok(mlua::MultiValue::from_vec(vec![
+                                    Value::Nil,
+                                    Value::String(
+                                        lua.create_string("grpc client: call load() first")?,
+                                    ),
+                                ]));
+                            }
+                        };
+
+                        let req_value = match lua_to_value(lua, req, Int64Repr::String) {
+                            Ok(v) => v,
+                            Err(err) => {
+                                return Ok(mlua::MultiValue::from_vec(vec![
+                                    Value::Nil,
+                                    Value::String(lua.create_string(err.to_string().as_bytes())?),
+                                ]));
+                            }
+                        };
+
+                        match wrkr_core::grpc_encode_unary_request(method.as_ref(), &req_value) {
+                            Ok(bytes) => Ok(mlua::MultiValue::from_vec(vec![Value::String(
+                                lua.create_string(bytes.as_ref())?,
+                            )])),
+                            Err(err) => Ok(mlua::MultiValue::from_vec(vec![
+                                Value::Nil,
+                                Value::String(lua.create_string(err.to_string().as_bytes())?),
+                            ])),
+                        }
+                    },
+                )?
+            };
+
             client_obj.set("load", load_fn)?;
             client_obj.set("connect", connect_fn)?;
             client_obj.set("invoke", invoke_fn)?;
+            client_obj.set("encode", encode_fn)?;
 
             Ok::<_, mlua::Error>(client_obj)
         })?

@@ -81,11 +81,16 @@ pub(crate) enum GrpcValueKind {
 #[derive(Debug)]
 pub(crate) struct GrpcMessageMeta {
     fields_by_name: HashMap<Arc<str>, GrpcInputFieldMeta>,
+    fields_by_number: HashMap<u32, (Arc<str>, GrpcFieldShape)>,
 }
 
 impl GrpcMessageMeta {
     pub(crate) fn fields_by_name(&self) -> &HashMap<Arc<str>, GrpcInputFieldMeta> {
         &self.fields_by_name
+    }
+
+    pub(crate) fn fields_by_number(&self) -> &HashMap<u32, (Arc<str>, GrpcFieldShape)> {
+        &self.fields_by_number
     }
 }
 
@@ -107,6 +112,7 @@ pub struct GrpcMethod {
     path: PathAndQuery,
     input_fields: HashMap<Arc<str>, GrpcInputFieldMeta>,
     output_fields: Vec<GrpcOutputFieldMeta>,
+    output_field_index_by_number: HashMap<u32, usize>,
 }
 
 impl GrpcMethod {
@@ -120,6 +126,10 @@ impl GrpcMethod {
 
     pub(crate) fn output_fields(&self) -> &[GrpcOutputFieldMeta] {
         self.output_fields.as_slice()
+    }
+
+    pub(crate) fn output_field_index_by_number(&self) -> &HashMap<u32, usize> {
+        &self.output_field_index_by_number
     }
 }
 
@@ -320,13 +330,22 @@ impl ProtoSchema {
 
             let mut fields_by_name: HashMap<Arc<str>, GrpcInputFieldMeta> =
                 HashMap::with_capacity(msg_desc.fields().len());
+            let mut fields_by_number: HashMap<u32, (Arc<str>, GrpcFieldShape)> =
+                HashMap::with_capacity(msg_desc.fields().len());
             for f in msg_desc.fields() {
                 let name = Arc::<str>::from(f.name());
                 let shape = build_shape(&f, message_cache, message_in_progress)?;
+                let n = f.number();
+                if n != 0 {
+                    fields_by_number.insert(n, (name.clone(), shape.clone()));
+                }
                 fields_by_name.insert(name, GrpcInputFieldMeta { field: f, shape });
             }
 
-            let meta = Arc::new(GrpcMessageMeta { fields_by_name });
+            let meta = Arc::new(GrpcMessageMeta {
+                fields_by_name,
+                fields_by_number,
+            });
 
             message_cache.insert(key.clone(), meta.clone());
             message_in_progress.remove(&key);
@@ -402,9 +421,19 @@ impl ProtoSchema {
             });
         }
 
+        let mut output_field_index_by_number: HashMap<u32, usize> =
+            HashMap::with_capacity(output_fields.len());
+        for (idx, meta) in output_fields.iter().enumerate() {
+            let n = meta.field.number();
+            if n != 0 {
+                output_field_index_by_number.insert(n, idx);
+            }
+        }
+
         Ok(GrpcMethod {
             input_fields,
             output_fields,
+            output_field_index_by_number,
             path,
         })
     }
