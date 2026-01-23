@@ -5,13 +5,29 @@ fn main() {
     println!("cargo:rerun-if-changed={}", proto.display());
     println!("cargo:rerun-if-env-changed=PROTOC");
 
-    let protoc = match protoc_bin_vendored::protoc_bin_path() {
-        Ok(p) => p,
-        Err(e) => panic!("failed to resolve vendored protoc: {e}"),
-    };
-    // SAFETY: build scripts run in a dedicated process; we set PROTOC before invoking tonic-prost-build.
-    unsafe {
-        std::env::set_var("PROTOC", protoc);
+    // External protoc only. Either set `PROTOC=/path/to/protoc` or ensure `protoc` is on PATH.
+    let protoc = std::env::var_os("PROTOC").filter(|v| !v.is_empty());
+    if protoc.is_none() {
+        match std::process::Command::new("protoc")
+            .arg("--version")
+            .output()
+        {
+            Ok(out) if out.status.success() => {}
+            Ok(out) => {
+                let exit = out.status.code().unwrap_or(-1);
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                panic!(
+                    "protoc is required to build wrkr-testserver but PATH 'protoc' failed (exit={exit}): {stderr}\n\
+                     Install protoc (protobuf compiler) or set PROTOC=/path/to/protoc"
+                );
+            }
+            Err(e) => {
+                panic!(
+                    "protoc is required to build wrkr-testserver but was not found on PATH: {e}\n\
+                     Install protoc (protobuf compiler) or set PROTOC=/path/to/protoc"
+                );
+            }
+        }
     }
 
     let includes_dir = proto

@@ -98,6 +98,8 @@ pub struct RunArgs {
 
     /// Enable a local live dashboard server (HTML + WebSocket progress stream).
     ///
+    /// `wrkr` prints a `dashboard=<url>` line to stderr; open it in your browser.
+    ///
     /// For security, binding to non-loopback addresses is rejected.
     #[arg(long, env = "WRKR_DASHBOARD", value_parser = parse_env_bool)]
     pub dashboard: bool,

@@ -16,7 +16,12 @@ Thanks for contributing to `wrkr`!
 Prerequisites:
 
 - Rust toolchain (see `rust-toolchain.toml`)
-- On Linux CI we install `libluajit-5.1-dev` for the Lua engine; on macOS it should build with the default setup.
+- LuaJIT (system):
+  - Linux (Debian/Ubuntu): `libluajit-5.1-dev` (and `pkg-config`)
+  - macOS (Homebrew): `brew install luajit pkg-config`
+- Protobuf compiler (`protoc`):
+  - Linux (Debian/Ubuntu): `sudo apt-get install -y protobuf-compiler`
+  - macOS (Homebrew): `brew install protobuf`
 
 Common commands:
 

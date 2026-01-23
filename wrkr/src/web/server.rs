@@ -212,6 +212,7 @@ async fn handle_ws(mut socket: WebSocket, state: Arc<AppState>) {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct Row {
     exec: String,
     elapsed_secs: u64,
@@ -424,12 +425,14 @@ impl ScenarioState {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ScenarioSnapshot {
     latest: Row,
     series: ScenarioSeries,
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct ScenarioSeries {
     rps: Vec<Point>,
     lat_p50: Vec<Point>,

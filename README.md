@@ -17,17 +17,30 @@ Today, `wrkr` is script-driven via Lua (see [`wrkr-lua/README.md`](wrkr-lua/READ
 
 ### Homebrew (macOS)
 
-Install via a formula URL (no Rust toolchain required):
+Install via Homebrew tap (no Rust toolchain required):
 
 ```bash
-brew install --formula https://raw.githubusercontent.com/nogcio/wrkr/main/homebrew/wrkr.rb
+brew tap nogcio/wrkr
+brew install wrkr
 ```
 
-Note: the formula in `main` is updated by CI when you publish a release tag like `vX.Y.Z`.
+Note: the tap formula is published to `nogcio/homebrew-wrkr` (tap name: `nogcio/wrkr`) when you publish a release tag like `vX.Y.Z`.
 
 ### GitHub Releases (binaries)
 
 Download a prebuilt binary from GitHub Releases and put `wrkr` on your `PATH`.
+
+Note: `wrkr` links against system LuaJIT. You may need to install it:
+
+- macOS (Homebrew): `brew install luajit`
+- Linux (Debian/Ubuntu): `sudo apt-get install -y libluajit-5.1-2`
+- Windows: release archive includes `lua51.dll` next to `wrkr.exe`
+
+Note: gRPC support requires `protoc` at runtime when you load `.proto` files.
+
+- macOS (Homebrew): `brew install protobuf`
+- Linux (Debian/Ubuntu): `sudo apt-get install -y protobuf-compiler`
+- Windows: release archive includes `protoc.exe` and `protoc-include/` next to `wrkr.exe` (or set `PROTOC` to override)
 
 ### Docker
 

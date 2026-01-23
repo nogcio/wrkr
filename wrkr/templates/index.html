@@ -181,18 +181,18 @@
           tr.innerHTML = `
             <td class="mono">${scenario}</td>
             <td class="mono">${r.exec ?? ""}</td>
-            <td class="right mono">${fmtDur(r.elapsed_secs)}</td>
-            <td class="right mono">${fmtVus(r.vus_current, r.vus_max)}</td>
-            <td class="right mono">${fmtFloat(r.rps_now)}</td>
-            <td class="right mono">${fmtOptFloat(r.latency_p95_ms_now)}</td>
-            <td class="right mono">${fmtFloat((r.error_rate_now ?? 0) * 100)}</td>
-            <td class="right mono">${fmtFloat(r.iterations_per_sec_now ?? 0)}</td>
-            <td class="right mono">${fmtInt(r.requests_total)}</td>
-            <td class="right mono">${fmtInt(r.failed_requests_total)}</td>
-            <td class="right mono">${fmtInt(r.checks_failed_total)}</td>
-            <td class="right mono">${fmtInt(r.bytes_received_per_sec_now)}</td>
-            <td class="right mono">${fmtInt(r.bytes_sent_per_sec_now)}</td>
-            <td class="right mono">${fmtInt(r.dropped_iterations_total)}</td>
+            <td class="right mono">${fmtDur(r.elapsedSecs)}</td>
+            <td class="right mono">${fmtVus(r.vusCurrent, r.vusMax)}</td>
+            <td class="right mono">${fmtFloat(r.rpsNow)}</td>
+            <td class="right mono">${fmtOptFloat(r.latencyP95MsNow)}</td>
+            <td class="right mono">${fmtFloat((r.errorRateNow ?? 0) * 100)}</td>
+            <td class="right mono">${fmtFloat(r.iterationsPerSecNow ?? 0)}</td>
+            <td class="right mono">${fmtInt(r.requestsTotal)}</td>
+            <td class="right mono">${fmtInt(r.failedRequestsTotal)}</td>
+            <td class="right mono">${fmtInt(r.checksFailedTotal)}</td>
+            <td class="right mono">${fmtInt(r.bytesReceivedPerSecNow)}</td>
+            <td class="right mono">${fmtInt(r.bytesSentPerSecNow)}</td>
+            <td class="right mono">${fmtInt(r.droppedIterationsTotal)}</td>
           `;
           rowsEl.appendChild(tr);
         }
@@ -201,7 +201,7 @@
           errorsEl.innerHTML = "";
           for (const scenario of scenarios) {
             const r = state.get(scenario);
-            const errs = r?.errors_now ?? {};
+            const errs = r?.errorsNow ?? {};
             const items = Object.entries(errs)
               .filter(([, v]) => (v ?? 0) > 0)
               .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
@@ -263,27 +263,27 @@
           if (snap.series) {
             const color = colorForScenario(scenario);
             setSeries(chartRps, scenario, snap.series.rps, { color });
-            setSeries(chartLat, scenario + " p50", snap.series.lat_p50, { color, dash: metricDashes.p50 });
-            setSeries(chartLat, scenario + " p90", snap.series.lat_p90, { color, dash: metricDashes.p90 });
-            setSeries(chartLat, scenario + " p95", snap.series.lat_p95, { color, dash: metricDashes.p95 });
-            setSeries(chartLat, scenario + " p99", snap.series.lat_p99, { color, dash: metricDashes.p99 });
-            setSeries(chartErrRate, scenario, snap.series.error_rate, { color });
+            setSeries(chartLat, scenario + " p50", snap.series.latP50, { color, dash: metricDashes.p50 });
+            setSeries(chartLat, scenario + " p90", snap.series.latP90, { color, dash: metricDashes.p90 });
+            setSeries(chartLat, scenario + " p95", snap.series.latP95, { color, dash: metricDashes.p95 });
+            setSeries(chartLat, scenario + " p99", snap.series.latP99, { color, dash: metricDashes.p99 });
+            setSeries(chartErrRate, scenario, snap.series.errorRate, { color });
             setSeries(chartVus, scenario, snap.series.vus, { color });
             setSeries(chartIters, scenario, snap.series.iters, { color });
             setSeries(chartNet, scenario + " rx", snap.series.rx, { color, dash: metricDashes.rx });
             setSeries(chartNet, scenario + " tx", snap.series.tx, { color, dash: metricDashes.tx });
           } else {
             const color = colorForScenario(scenario);
-            pushPoint(chartRps, scenario, latest.elapsed_secs, latest.rps_now, { color });
-            pushPoint(chartLat, scenario + " p50", latest.elapsed_secs, latest.latency_p50_ms_now, { color, dash: metricDashes.p50 });
-            pushPoint(chartLat, scenario + " p90", latest.elapsed_secs, latest.latency_p90_ms_now, { color, dash: metricDashes.p90 });
-            pushPoint(chartLat, scenario + " p95", latest.elapsed_secs, latest.latency_p95_ms_now, { color, dash: metricDashes.p95 });
-            pushPoint(chartLat, scenario + " p99", latest.elapsed_secs, latest.latency_p99_ms_now, { color, dash: metricDashes.p99 });
-            pushPoint(chartErrRate, scenario, latest.elapsed_secs, (latest.error_rate_now ?? 0) * 100, { color });
-            pushPoint(chartVus, scenario, latest.elapsed_secs, latest.vus_current, { color });
-            pushPoint(chartIters, scenario, latest.elapsed_secs, latest.iterations_per_sec_now, { color });
-            pushPoint(chartNet, scenario + " rx", latest.elapsed_secs, latest.bytes_received_per_sec_now, { color, dash: metricDashes.rx });
-            pushPoint(chartNet, scenario + " tx", latest.elapsed_secs, latest.bytes_sent_per_sec_now, { color, dash: metricDashes.tx });
+            pushPoint(chartRps, scenario, latest.elapsedSecs, latest.rpsNow, { color });
+            pushPoint(chartLat, scenario + " p50", latest.elapsedSecs, latest.latencyP50MsNow, { color, dash: metricDashes.p50 });
+            pushPoint(chartLat, scenario + " p90", latest.elapsedSecs, latest.latencyP90MsNow, { color, dash: metricDashes.p90 });
+            pushPoint(chartLat, scenario + " p95", latest.elapsedSecs, latest.latencyP95MsNow, { color, dash: metricDashes.p95 });
+            pushPoint(chartLat, scenario + " p99", latest.elapsedSecs, latest.latencyP99MsNow, { color, dash: metricDashes.p99 });
+            pushPoint(chartErrRate, scenario, latest.elapsedSecs, (latest.errorRateNow ?? 0) * 100, { color });
+            pushPoint(chartVus, scenario, latest.elapsedSecs, latest.vusCurrent, { color });
+            pushPoint(chartIters, scenario, latest.elapsedSecs, latest.iterationsPerSecNow, { color });
+            pushPoint(chartNet, scenario + " rx", latest.elapsedSecs, latest.bytesReceivedPerSecNow, { color, dash: metricDashes.rx });
+            pushPoint(chartNet, scenario + " tx", latest.elapsedSecs, latest.bytesSentPerSecNow, { color, dash: metricDashes.tx });
           }
         }
         render();
@@ -311,16 +311,16 @@
             state.set(msg.scenario, msg.data);
             const r = msg.data;
             const color = colorForScenario(msg.scenario);
-            pushPoint(chartRps, msg.scenario, r.elapsed_secs, r.rps_now, { color });
-            pushPoint(chartLat, msg.scenario + " p50", r.elapsed_secs, r.latency_p50_ms_now, { color, dash: metricDashes.p50 });
-            pushPoint(chartLat, msg.scenario + " p90", r.elapsed_secs, r.latency_p90_ms_now, { color, dash: metricDashes.p90 });
-            pushPoint(chartLat, msg.scenario + " p95", r.elapsed_secs, r.latency_p95_ms_now, { color, dash: metricDashes.p95 });
-            pushPoint(chartLat, msg.scenario + " p99", r.elapsed_secs, r.latency_p99_ms_now, { color, dash: metricDashes.p99 });
-            pushPoint(chartErrRate, msg.scenario, r.elapsed_secs, (r.error_rate_now ?? 0) * 100, { color });
-            pushPoint(chartVus, msg.scenario, r.elapsed_secs, r.vus_current, { color });
-            pushPoint(chartIters, msg.scenario, r.elapsed_secs, r.iterations_per_sec_now, { color });
-            pushPoint(chartNet, msg.scenario + " rx", r.elapsed_secs, r.bytes_received_per_sec_now, { color, dash: metricDashes.rx });
-            pushPoint(chartNet, msg.scenario + " tx", r.elapsed_secs, r.bytes_sent_per_sec_now, { color, dash: metricDashes.tx });
+            pushPoint(chartRps, msg.scenario, r.elapsedSecs, r.rpsNow, { color });
+            pushPoint(chartLat, msg.scenario + " p50", r.elapsedSecs, r.latencyP50MsNow, { color, dash: metricDashes.p50 });
+            pushPoint(chartLat, msg.scenario + " p90", r.elapsedSecs, r.latencyP90MsNow, { color, dash: metricDashes.p90 });
+            pushPoint(chartLat, msg.scenario + " p95", r.elapsedSecs, r.latencyP95MsNow, { color, dash: metricDashes.p95 });
+            pushPoint(chartLat, msg.scenario + " p99", r.elapsedSecs, r.latencyP99MsNow, { color, dash: metricDashes.p99 });
+            pushPoint(chartErrRate, msg.scenario, r.elapsedSecs, (r.errorRateNow ?? 0) * 100, { color });
+            pushPoint(chartVus, msg.scenario, r.elapsedSecs, r.vusCurrent, { color });
+            pushPoint(chartIters, msg.scenario, r.elapsedSecs, r.iterationsPerSecNow, { color });
+            pushPoint(chartNet, msg.scenario + " rx", r.elapsedSecs, r.bytesReceivedPerSecNow, { color, dash: metricDashes.rx });
+            pushPoint(chartNet, msg.scenario + " tx", r.elapsedSecs, r.bytesSentPerSecNow, { color, dash: metricDashes.tx });
             render();
             chartsUpdate();
           }
