@@ -2,15 +2,14 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
-use prost::Message as _;
 use tonic::metadata::{MetadataKey, MetadataValue};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 
 use crate::proto::GrpcMethod;
 
-use super::codec::DynamicMessageCodec;
-use super::convert::{dynamic_message_to_value_for_method, value_to_dynamic_message_for_method};
+use super::codec_bytes::BytesCodec;
 use super::metadata::metadata_to_pairs;
+use super::wire::{decode_value_for_method, encode_value_for_method};
 use super::{ConnectOptions, Error, InvokeOptions, Result, UnaryResult};
 
 #[derive(Debug, Clone)]
@@ -95,10 +94,11 @@ impl GrpcClient {
 
         let path = method.path().clone();
 
-        let req = value_to_dynamic_message_for_method(method, req).map_err(Error::Encode)?;
-        let bytes_sent = req.encoded_len() as u64;
+        let bytes = encode_value_for_method(method, &req).map_err(Error::Encode)?;
 
-        let mut request = tonic::Request::new(req);
+        let bytes_sent = bytes.len() as u64;
+
+        let mut request = tonic::Request::new(bytes);
 
         if let Some(timeout) = opts.timeout {
             request.set_timeout(timeout);
@@ -116,7 +116,7 @@ impl GrpcClient {
         // Invariant: connect_pooled ensures at least 1 channel.
         let channel = self.channels[i % self.channels.len()].clone();
         let mut grpc = tonic::client::Grpc::new(channel);
-        let codec = DynamicMessageCodec::new(method.output_desc().clone());
+        let codec = BytesCodec;
 
         let res = async {
             grpc.ready()
@@ -131,11 +131,10 @@ impl GrpcClient {
             Ok(res) => {
                 let headers = metadata_to_pairs(res.metadata());
                 let decoded = res.into_inner();
-                let msg = decoded.msg;
-                // Note: this is application-message bytes (encoded protobuf), not transport bytes.
-                let bytes_received = msg.encoded_len() as u64;
+                let bytes_received = decoded.bytes.len() as u64;
 
-                let response = dynamic_message_to_value_for_method(method, &msg);
+                let response = decode_value_for_method(method, decoded.bytes.clone())
+                    .map_err(Error::Decode)?;
 
                 Ok(UnaryResult {
                     ok: true,

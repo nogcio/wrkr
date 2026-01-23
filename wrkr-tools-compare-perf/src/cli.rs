@@ -47,6 +47,10 @@ pub struct Cli {
     #[arg(long, env = "RATIO_OK_POST_JSON", default_value_t = 0.90)]
     pub(crate) ratio_ok_post_json: f64,
 
+    /// Gate: wrkr_rps must be >= wrk_rps * ratio
+    #[arg(long, env = "RATIO_OK_WFB_JSON_AGGREGATE", default_value_t = 0.90)]
+    pub(crate) ratio_ok_wfb_json_aggregate: f64,
+
     /// Gate: wrkr_rps must be > k6_rps * ratio
     #[arg(long, env = "RATIO_OK_WRKR_OVER_K6", default_value_t = 1.4)]
     pub(crate) ratio_ok_wrkr_over_k6: f64,
@@ -54,6 +58,14 @@ pub struct Cli {
     /// Gate for gRPC: wrkr_rps must be > k6_rps * ratio
     #[arg(long, env = "RATIO_OK_GRPC_WRKR_OVER_K6", default_value_t = 2.0)]
     pub(crate) ratio_ok_grpc_wrkr_over_k6: f64,
+
+    /// Gate for wfb gRPC AggregateOrders: wrkr_rps must be > k6_rps * ratio
+    #[arg(
+        long,
+        env = "RATIO_OK_WFB_GRPC_AGGREGATE_WRKR_OVER_K6",
+        default_value_t = 1.20
+    )]
+    pub(crate) ratio_ok_wfb_grpc_aggregate_wrkr_over_k6: f64,
 
     /// Optional cross-protocol gate: wrkr gRPC RPS must be >= wrk GET /hello RPS * ratio
     #[arg(

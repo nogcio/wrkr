@@ -7,4 +7,5 @@ pub enum GrpcTransportErrorKind {
     MetadataValue,
     InvalidMethodPath,
     Encode,
+    Decode,
 }

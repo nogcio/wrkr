@@ -21,6 +21,9 @@ pub enum Error {
 
     #[error("failed to encode request: {0}")]
     Encode(String),
+
+    #[error("failed to decode response: {0}")]
+    Decode(String),
 }
 
 impl Error {
@@ -33,6 +36,7 @@ impl Error {
             Self::MetadataValue { .. } => GrpcTransportErrorKind::MetadataValue,
             Self::InvalidMethodPath => GrpcTransportErrorKind::InvalidMethodPath,
             Self::Encode(_) => GrpcTransportErrorKind::Encode,
+            Self::Decode(_) => GrpcTransportErrorKind::Decode,
         }
     }
 }

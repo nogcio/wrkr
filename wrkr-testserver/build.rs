@@ -2,7 +2,9 @@ use std::path::{Path, PathBuf};
 
 fn main() {
     let proto = PathBuf::from("../wrkr-lua/tests/scripts/protos/echo.proto");
+    let proto2 = PathBuf::from("../wrkr-lua/tests/scripts/protos/analytics.proto");
     println!("cargo:rerun-if-changed={}", proto.display());
+    println!("cargo:rerun-if-changed={}", proto2.display());
     println!("cargo:rerun-if-env-changed=PROTOC");
 
     // External protoc only. Either set `PROTOC=/path/to/protoc` or ensure `protoc` is on PATH.
@@ -37,10 +39,7 @@ fn main() {
 
     if let Err(e) = tonic_prost_build::configure()
         .build_client(false)
-        .compile_protos(
-            std::slice::from_ref(&proto),
-            std::slice::from_ref(&includes_dir),
-        )
+        .compile_protos(&[proto, proto2], std::slice::from_ref(&includes_dir))
     {
         panic!("failed to compile grpc test protos: {e}");
     }

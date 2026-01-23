@@ -72,6 +72,24 @@ pub fn run(cli: Cli) -> Result<()> {
     )?;
     failures += _post_json.failures;
 
+    let _wfb_json_aggregate = run_http_case(
+        &root,
+        &tools,
+        &targets.base_url,
+        &cli,
+        HttpCase {
+            title: "POST /analytics/aggregate (wfb json + checks)",
+            scripts: HttpCaseScripts {
+                wrk: "tools/perf/wrk_wfb_json_aggregate.lua",
+                wrkr: "tools/perf/wrkr_wfb_json_aggregate.lua",
+                k6: "tools/perf/k6_wfb_json_aggregate.js",
+            },
+            ratio_ok_wrkr_over_wrk: cli.ratio_ok_wfb_json_aggregate,
+            ratio_ok_wrkr_over_k6: cli.ratio_ok_wrkr_over_k6,
+        },
+    )?;
+    failures += _wfb_json_aggregate.failures;
+
     let grpc = run_grpc_case(
         "gRPC Echo (plaintext)",
         &root,
@@ -85,6 +103,20 @@ pub fn run(cli: Cli) -> Result<()> {
         ratio_ok_grpc_wrkr_over_k6,
     )?;
     failures += grpc.failures;
+
+    let grpc_wfb_aggregate = run_grpc_case(
+        "gRPC AggregateOrders (wfb)",
+        &root,
+        &tools,
+        &targets.grpc_target,
+        &cli,
+        GrpcCaseScripts {
+            wrkr: "tools/perf/wfb_grpc_aggregate.lua",
+            k6: "tools/perf/k6_wfb_grpc_aggregate.js",
+        },
+        cli.ratio_ok_wfb_grpc_aggregate_wrkr_over_k6,
+    )?;
+    failures += grpc_wfb_aggregate.failures;
 
     // Cross-protocol comparison: wrkr gRPC vs wrk GET /hello.
     if let Some(wrk_hello) = hello.wrk_rps {

@@ -46,15 +46,47 @@ pub struct ProtoSchema {
 #[derive(Debug, Clone)]
 pub(crate) enum GrpcFieldShape {
     Scalar {
-        kind: prost_reflect::Kind,
+        kind: GrpcValueKind,
     },
     List {
-        kind: prost_reflect::Kind,
+        kind: GrpcValueKind,
     },
     Map {
         key_kind: prost_reflect::Kind,
-        value_kind: prost_reflect::Kind,
+        value_kind: GrpcValueKind,
     },
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum GrpcValueKind {
+    Bool,
+    String,
+    Bytes,
+    Int32,
+    Sint32,
+    Sfixed32,
+    Int64,
+    Sint64,
+    Sfixed64,
+    Uint32,
+    Fixed32,
+    Uint64,
+    Fixed64,
+    Float,
+    Double,
+    Enum(prost_reflect::EnumDescriptor),
+    Message(Arc<GrpcMessageMeta>),
+}
+
+#[derive(Debug)]
+pub(crate) struct GrpcMessageMeta {
+    fields_by_name: HashMap<Arc<str>, GrpcInputFieldMeta>,
+}
+
+impl GrpcMessageMeta {
+    pub(crate) fn fields_by_name(&self) -> &HashMap<Arc<str>, GrpcInputFieldMeta> {
+        &self.fields_by_name
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -67,14 +99,13 @@ pub(crate) struct GrpcInputFieldMeta {
 pub(crate) struct GrpcOutputFieldMeta {
     pub(crate) field: prost_reflect::FieldDescriptor,
     pub(crate) name: Arc<str>,
+    pub(crate) shape: GrpcFieldShape,
 }
 
 #[derive(Debug, Clone)]
 pub struct GrpcMethod {
     path: PathAndQuery,
-    input: prost_reflect::MessageDescriptor,
     input_fields: HashMap<Arc<str>, GrpcInputFieldMeta>,
-    output: prost_reflect::MessageDescriptor,
     output_fields: Vec<GrpcOutputFieldMeta>,
 }
 
@@ -83,16 +114,8 @@ impl GrpcMethod {
         &self.path
     }
 
-    pub(crate) fn input_desc(&self) -> &prost_reflect::MessageDescriptor {
-        &self.input
-    }
-
     pub(crate) fn input_fields(&self) -> &HashMap<Arc<str>, GrpcInputFieldMeta> {
         &self.input_fields
-    }
-
-    pub(crate) fn output_desc(&self) -> &prost_reflect::MessageDescriptor {
-        &self.output
     }
 
     pub(crate) fn output_fields(&self) -> &[GrpcOutputFieldMeta] {
@@ -242,7 +265,80 @@ impl ProtoSchema {
         )))
         .map_err(|_| Error::InvalidFullMethod(full_method.to_string()))?;
 
-        fn build_shape(field: &prost_reflect::FieldDescriptor) -> Result<GrpcFieldShape> {
+        fn build_kind(
+            kind: prost_reflect::Kind,
+            message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
+            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+        ) -> Result<GrpcValueKind> {
+            Ok(match kind {
+                prost_reflect::Kind::Bool => GrpcValueKind::Bool,
+                prost_reflect::Kind::String => GrpcValueKind::String,
+                prost_reflect::Kind::Bytes => GrpcValueKind::Bytes,
+
+                prost_reflect::Kind::Int32 => GrpcValueKind::Int32,
+                prost_reflect::Kind::Sint32 => GrpcValueKind::Sint32,
+                prost_reflect::Kind::Sfixed32 => GrpcValueKind::Sfixed32,
+
+                prost_reflect::Kind::Int64 => GrpcValueKind::Int64,
+                prost_reflect::Kind::Sint64 => GrpcValueKind::Sint64,
+                prost_reflect::Kind::Sfixed64 => GrpcValueKind::Sfixed64,
+
+                prost_reflect::Kind::Uint32 => GrpcValueKind::Uint32,
+                prost_reflect::Kind::Fixed32 => GrpcValueKind::Fixed32,
+
+                prost_reflect::Kind::Uint64 => GrpcValueKind::Uint64,
+                prost_reflect::Kind::Fixed64 => GrpcValueKind::Fixed64,
+
+                prost_reflect::Kind::Float => GrpcValueKind::Float,
+                prost_reflect::Kind::Double => GrpcValueKind::Double,
+
+                prost_reflect::Kind::Enum(enum_desc) => GrpcValueKind::Enum(enum_desc),
+                prost_reflect::Kind::Message(msg_desc) => {
+                    let meta = build_message_meta(msg_desc, message_cache, message_in_progress)?;
+                    GrpcValueKind::Message(meta)
+                }
+            })
+        }
+
+        fn build_message_meta(
+            msg_desc: prost_reflect::MessageDescriptor,
+            message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
+            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+        ) -> Result<Arc<GrpcMessageMeta>> {
+            let key = Arc::<str>::from(msg_desc.full_name());
+            if let Some(existing) = message_cache.get(&key) {
+                return Ok(existing.clone());
+            }
+
+            if message_in_progress.contains(&key) {
+                return Err(Error::InvalidDescriptor(format!(
+                    "recursive message types are not supported: {}",
+                    msg_desc.full_name()
+                )));
+            }
+            message_in_progress.insert(key.clone());
+
+            let mut fields_by_name: HashMap<Arc<str>, GrpcInputFieldMeta> =
+                HashMap::with_capacity(msg_desc.fields().len());
+            for f in msg_desc.fields() {
+                let name = Arc::<str>::from(f.name());
+                let shape = build_shape(&f, message_cache, message_in_progress)?;
+                fields_by_name.insert(name, GrpcInputFieldMeta { field: f, shape });
+            }
+
+            let meta = Arc::new(GrpcMessageMeta { fields_by_name });
+
+            message_cache.insert(key.clone(), meta.clone());
+            message_in_progress.remove(&key);
+
+            Ok(meta)
+        }
+
+        fn build_shape(
+            field: &prost_reflect::FieldDescriptor,
+            message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
+            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+        ) -> Result<GrpcFieldShape> {
             if field.is_map() {
                 let prost_reflect::Kind::Message(entry_desc) = field.kind() else {
                     return Err(Error::InvalidDescriptor(
@@ -265,11 +361,11 @@ impl ProtoSchema {
 
                 return Ok(GrpcFieldShape::Map {
                     key_kind,
-                    value_kind,
+                    value_kind: build_kind(value_kind, message_cache, message_in_progress)?,
                 });
             }
 
-            let kind = field.kind();
+            let kind = build_kind(field.kind(), message_cache, message_in_progress)?;
             if field.is_list() {
                 Ok(GrpcFieldShape::List { kind })
             } else {
@@ -278,6 +374,9 @@ impl ProtoSchema {
         }
 
         let input = method.input();
+        let mut message_cache: HashMap<Arc<str>, Arc<GrpcMessageMeta>> = HashMap::new();
+        let mut message_in_progress: std::collections::HashSet<Arc<str>> =
+            std::collections::HashSet::new();
         let mut input_fields: HashMap<Arc<str>, GrpcInputFieldMeta> =
             HashMap::with_capacity(input.fields().len());
         for f in input.fields() {
@@ -285,7 +384,7 @@ impl ProtoSchema {
             input_fields.insert(
                 name,
                 GrpcInputFieldMeta {
-                    shape: build_shape(&f)?,
+                    shape: build_shape(&f, &mut message_cache, &mut message_in_progress)?,
                     field: f,
                 },
             );
@@ -295,13 +394,16 @@ impl ProtoSchema {
         let mut output_fields: Vec<GrpcOutputFieldMeta> = Vec::with_capacity(output.fields().len());
         for f in output.fields() {
             let name = Arc::<str>::from(f.name());
-            output_fields.push(GrpcOutputFieldMeta { field: f, name });
+            let shape = build_shape(&f, &mut message_cache, &mut message_in_progress)?;
+            output_fields.push(GrpcOutputFieldMeta {
+                field: f,
+                name,
+                shape,
+            });
         }
 
         Ok(GrpcMethod {
-            input,
             input_fields,
-            output,
             output_fields,
             path,
         })

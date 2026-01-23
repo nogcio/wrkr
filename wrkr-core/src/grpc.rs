@@ -1,10 +1,10 @@
 mod client;
-mod codec;
-mod convert;
+mod codec_bytes;
 mod error;
 mod kind;
 mod metadata;
 mod types;
+mod wire;
 
 pub use client::GrpcClient;
 pub use error::{Error, Result};

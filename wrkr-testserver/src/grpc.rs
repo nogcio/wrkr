@@ -1,4 +1,4 @@
-use std::net::SocketAddr;
+use std::{collections::HashMap, net::SocketAddr};
 
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -7,6 +7,7 @@ use tonic::{Request, Response, Status};
 
 pub mod echo {
     tonic::include_proto!("wrkr.test");
+    tonic::include_proto!("_");
 }
 
 #[derive(Debug, Default)]
@@ -20,6 +21,52 @@ impl echo::echo_service_server::EchoService for EchoSvc {
     ) -> std::result::Result<Response<echo::EchoResponse>, Status> {
         let msg = request.into_inner().message;
         Ok(Response::new(echo::EchoResponse { message: msg }))
+    }
+}
+
+#[derive(Debug, Default)]
+struct AnalyticsSrv;
+
+#[tonic::async_trait]
+impl echo::analytics_service_server::AnalyticsService for AnalyticsSrv {
+    async fn aggregate_orders(
+        &self,
+        request: Request<echo::AnalyticsRequest>,
+    ) -> Result<Response<echo::AggregateResult>, Status> {
+        let client_id = match request.metadata().get("x-client-id") {
+            Some(v) => v.to_str().unwrap_or("").to_string(),
+            None => "".to_string(),
+        };
+
+        let req = request.into_inner();
+
+        let mut processed_orders = 0;
+        let mut amount_by_country: HashMap<String, i64> = HashMap::default();
+        let mut quantity_by_category: HashMap<String, i32> = HashMap::default();
+
+        for order in req.orders {
+            if order.status == echo::OrderStatus::Completed as i32 {
+                processed_orders += 1;
+
+                let mut order_amount = 0;
+                for item in order.items {
+                    order_amount += item.price_cents * item.quantity as i64;
+
+                    *quantity_by_category.entry(item.category).or_insert(0) += item.quantity;
+                }
+
+                *amount_by_country.entry(order.country).or_insert(0) += order_amount;
+            }
+        }
+
+        let reply = echo::AggregateResult {
+            processed_orders,
+            amount_by_country: amount_by_country.into_iter().collect(),
+            quantity_by_category: quantity_by_category.into_iter().collect(),
+            echoed_client_id: client_id,
+        };
+
+        Ok(Response::new(reply))
     }
 }
 
@@ -39,9 +86,11 @@ impl GrpcTestServer {
             let incoming = TcpListenerStream::new(listener);
 
             let svc = echo::echo_service_server::EchoServiceServer::new(EchoSvc);
+            let ag_svc = echo::analytics_service_server::AnalyticsServiceServer::new(AnalyticsSrv);
 
             let server = tonic::transport::Server::builder()
                 .add_service(svc)
+                .add_service(ag_svc)
                 .serve_with_incoming_shutdown(incoming, async move {
                     let _ = shutdown_rx.await;
                 });

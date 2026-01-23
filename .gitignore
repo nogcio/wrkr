@@ -1,5 +1,8 @@
 /target
 
+# Local profiling output / scratch
+/tmp
+
 # mdBook build output
 /docs/book
 /docs/.mdbook
