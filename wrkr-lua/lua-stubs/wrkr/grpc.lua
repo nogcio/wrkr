@@ -14,7 +14,7 @@ local ClientModule = {}
 ---@field insecure_skip_verify boolean?
 
 ---@class wrkr.grpc.NewOptions
----@field pool_size integer? Number of TCP connections in the shared pool (default = ceil(max_vus / 32))
+---@field pool_size integer? Number of TCP connections in the shared pool (default = clamp(floor(max_vus / 8), 16, 64))
 
 ---@class wrkr.grpc.ConnectOptions
 ---@field timeout string? e.g. "3s"
