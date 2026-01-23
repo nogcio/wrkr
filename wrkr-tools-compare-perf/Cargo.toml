@@ -1,5 +1,5 @@
 [package]
-name = "wrkr-value"
+name = "wrkr-tools-compare-perf"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -8,8 +8,10 @@ homepage.workspace = true
 repository.workspace = true
 
 [dependencies]
-bytes = "1"
-ahash = "0.8"
+anyhow = { workspace = true }
+clap = { workspace = true }
+sysinfo = { workspace = true }
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

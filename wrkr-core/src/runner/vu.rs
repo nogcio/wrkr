@@ -45,6 +45,8 @@ impl StartSignal {
 #[derive(Debug, Clone)]
 pub struct VuContext {
     pub vu_id: u64,
+    /// Total VUs spawned for the run (across all scenarios).
+    pub max_vus: u64,
     pub scenario: Arc<str>,
     pub scenario_vu: u64,
     pub script: Arc<str>,

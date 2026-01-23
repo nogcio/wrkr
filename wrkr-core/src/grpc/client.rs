@@ -1,24 +1,36 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
 
 use prost::Message as _;
-use tonic::codegen::http::uri::PathAndQuery;
 use tonic::metadata::{MetadataKey, MetadataValue};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Endpoint, Identity};
 
 use crate::proto::GrpcMethod;
 
 use super::codec::DynamicMessageCodec;
-use super::convert::{dynamic_message_to_value, value_to_dynamic_message};
+use super::convert::{dynamic_message_to_value_for_method, value_to_dynamic_message_for_method};
 use super::metadata::metadata_to_pairs;
 use super::{ConnectOptions, Error, InvokeOptions, Result, UnaryResult};
 
 #[derive(Debug, Clone)]
 pub struct GrpcClient {
-    channel: Channel,
+    channels: Arc<[Channel]>,
+    rr: Arc<AtomicUsize>,
 }
 
 impl GrpcClient {
     pub async fn connect(target: &str, opts: ConnectOptions) -> Result<Self> {
+        Self::connect_pooled(target, opts, 1).await
+    }
+
+    pub async fn connect_pooled(
+        target: &str,
+        opts: ConnectOptions,
+        pool_size: usize,
+    ) -> Result<Self> {
+        let pool_size = pool_size.max(1);
+
         let uri = if target.contains("://") {
             target.to_string()
         } else if opts.tls.is_some() {
@@ -28,6 +40,14 @@ impl GrpcClient {
         };
 
         let mut endpoint = Endpoint::from_shared(uri)?;
+
+        // Throughput-sensitive defaults for local perf runs.
+        // A larger buffer reduces time spent waiting for tower Buffer capacity
+        // under high VU counts.
+        endpoint = endpoint
+            .tcp_nodelay(true)
+            .buffer_size(4096)
+            .http2_adaptive_window(false);
 
         if let Some(timeout) = opts.timeout {
             endpoint = endpoint.connect_timeout(timeout);
@@ -53,8 +73,16 @@ impl GrpcClient {
             endpoint = endpoint.tls_config(tls_cfg)?;
         }
 
-        let channel = endpoint.connect().await.map_err(Error::Connect)?;
-        Ok(Self { channel })
+        let mut channels: Vec<Channel> = Vec::with_capacity(pool_size);
+        for _ in 0..pool_size {
+            let channel = endpoint.clone().connect().await.map_err(Error::Connect)?;
+            channels.push(channel);
+        }
+
+        Ok(Self {
+            channels: Arc::from(channels.into_boxed_slice()),
+            rr: Arc::new(AtomicUsize::new(0)),
+        })
     }
 
     pub async fn unary(
@@ -65,16 +93,9 @@ impl GrpcClient {
     ) -> Result<UnaryResult> {
         let started = Instant::now();
 
-        let method = method.descriptor();
+        let path = method.path().clone();
 
-        let service = method.parent_service().full_name();
-        let name = method.name();
-        let path =
-            PathAndQuery::from_maybe_shared(bytes::Bytes::from(format!("/{service}/{name}")))
-                .map_err(|_| Error::InvalidMethodPath)?;
-
-        let req = value_to_dynamic_message(method.input(), req).map_err(Error::Encode)?;
-
+        let req = value_to_dynamic_message_for_method(method, req).map_err(Error::Encode)?;
         let bytes_sent = req.encoded_len() as u64;
 
         let mut request = tonic::Request::new(req);
@@ -91,8 +112,11 @@ impl GrpcClient {
             request.metadata_mut().insert(key, value);
         }
 
-        let mut grpc = tonic::client::Grpc::new(self.channel.clone());
-        let codec = DynamicMessageCodec::new(method.output());
+        let i = self.rr.fetch_add(1, Ordering::Relaxed);
+        // Invariant: connect_pooled ensures at least 1 channel.
+        let channel = self.channels[i % self.channels.len()].clone();
+        let mut grpc = tonic::client::Grpc::new(channel);
+        let codec = DynamicMessageCodec::new(method.output_desc().clone());
 
         let res = async {
             grpc.ready()
@@ -106,17 +130,20 @@ impl GrpcClient {
         match res {
             Ok(res) => {
                 let headers = metadata_to_pairs(res.metadata());
-                let msg: prost_reflect::DynamicMessage = res.into_inner();
+                let decoded = res.into_inner();
+                let msg = decoded.msg;
+                // Note: this is application-message bytes (encoded protobuf), not transport bytes.
                 let bytes_received = msg.encoded_len() as u64;
 
-                let response = dynamic_message_to_value(&msg);
+                let response = dynamic_message_to_value_for_method(method, &msg);
+
                 Ok(UnaryResult {
                     ok: true,
                     status: Some(0),
                     message: None,
                     error: None,
                     transport_error_kind: None,
-                    response: Some(response),
+                    response,
                     headers,
                     trailers: Vec::new(),
                     elapsed,
@@ -128,13 +155,14 @@ impl GrpcClient {
                 // Non-OK gRPC status is a normal protocol outcome.
                 let code = status.code() as u16;
                 let trailers = metadata_to_pairs(status.metadata());
+
                 Ok(UnaryResult {
                     ok: false,
                     status: Some(code),
                     message: Some(status.message().to_string()),
                     error: Some(status.to_string()),
                     transport_error_kind: None,
-                    response: None,
+                    response: wrkr_value::Value::Null,
                     headers: Vec::new(),
                     trailers,
                     elapsed,

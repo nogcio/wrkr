@@ -13,6 +13,9 @@ local ClientModule = {}
 ---@field server_name string? SNI / domain name
 ---@field insecure_skip_verify boolean?
 
+---@class wrkr.grpc.NewOptions
+---@field pool_size integer? Number of TCP connections in the shared pool (default = clamp(floor(max_vus / 8), 16, 64))
+
 ---@class wrkr.grpc.ConnectOptions
 ---@field timeout string? e.g. "3s"
 ---@field tls wrkr.grpc.TlsOptions?
@@ -22,6 +25,8 @@ local ClientModule = {}
 ---@field metadata table<string, string|string[]>?
 ---@field tags table<string, string|number|boolean>?
 ---@field name string?
+---@field include_metadata boolean? If true, include response headers/trailers (can be expensive).
+---@field discard_response boolean? If true, skip decoding/converting the response message.
 
 ---@class wrkr.grpc.UnaryResponse
 ---@field ok boolean
@@ -37,7 +42,8 @@ local ClientModule = {}
 local Client = {}
 
 ---@return wrkr.grpc.Client
-function ClientModule.new() end
+---@param opts wrkr.grpc.NewOptions?
+function ClientModule.new(opts) end
 
 ---@param paths string[]
 ---@param file string

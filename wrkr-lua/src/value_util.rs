@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::sync::Arc;
 
 use mlua::{Lua, Table, Value};
@@ -26,17 +25,27 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
             return Err(err("value too deep"));
         }
 
-        // First pass: detect a dense 1..=N array.
-        let mut saw_non_int_key = false;
-        let mut max_idx: usize = 0;
-        let mut array_items: Vec<Option<wrkr_value::Value>> = Vec::new();
+        #[derive(Debug, Clone)]
+        enum EntryKey {
+            Int(i64),
+            Str(Arc<str>),
+            Bool(bool),
+        }
 
-        // Also collect for object/map construction.
-        let mut object_items: HashMap<Arc<str>, wrkr_value::Value> = HashMap::new();
-        let mut map_items: HashMap<wrkr_value::MapKey, wrkr_value::Value> = HashMap::new();
+        struct Entry {
+            key: EntryKey,
+            value: Option<wrkr_value::Value>,
+        }
+
+        // Track whether we have *only* positive integer keys (1..=N), which allows Array.
+        let mut only_pos_int_keys = true;
+        let mut max_idx: usize = 0;
+        let mut array_entry_idx: Vec<Option<usize>> = Vec::new();
 
         let mut saw_string_key = false;
         let mut saw_other_key = false;
+
+        let mut entries: Vec<Entry> = Vec::new();
 
         for pair in t.pairs::<Value, Value>() {
             let (k, v) = pair?;
@@ -44,69 +53,109 @@ pub fn lua_to_value(lua: &Lua, value: Value, int64_repr: Int64Repr) -> Result<wr
 
             match k {
                 Value::Integer(i) => {
+                    saw_other_key = true;
+                    let entry_idx = entries.len();
+                    entries.push(Entry {
+                        key: EntryKey::Int(i),
+                        value: Some(v),
+                    });
+
                     if i >= 1 {
                         let idx = i as usize;
                         max_idx = max_idx.max(idx);
-                        if array_items.len() < idx {
-                            array_items.resize_with(idx, || None);
+                        if array_entry_idx.len() < idx {
+                            array_entry_idx.resize_with(idx, || None);
                         }
-                        if array_items[idx - 1].is_some() {
+                        if array_entry_idx[idx - 1].is_some() {
                             return Err(err("duplicate array index"));
                         }
-                        array_items[idx - 1] = Some(v.clone());
-
-                        let mk = if i >= 0 {
-                            wrkr_value::MapKey::U64(i as u64)
-                        } else {
-                            wrkr_value::MapKey::I64(i)
-                        };
-                        map_items.insert(mk, v);
+                        array_entry_idx[idx - 1] = Some(entry_idx);
                     } else {
-                        saw_non_int_key = true;
-                        saw_other_key = true;
-                        map_items.insert(wrkr_value::MapKey::I64(i), v);
+                        only_pos_int_keys = false;
                     }
                 }
                 Value::String(s) => {
-                    saw_non_int_key = true;
+                    only_pos_int_keys = false;
                     saw_string_key = true;
+
                     let key = Arc::<str>::from(s.to_string_lossy().to_string());
-                    object_items.insert(key.clone(), v.clone());
-                    map_items.insert(wrkr_value::MapKey::String(key), v);
+                    entries.push(Entry {
+                        key: EntryKey::Str(key),
+                        value: Some(v),
+                    });
                 }
                 Value::Boolean(b) => {
-                    saw_non_int_key = true;
+                    only_pos_int_keys = false;
                     saw_other_key = true;
-                    map_items.insert(wrkr_value::MapKey::Bool(b), v);
+                    entries.push(Entry {
+                        key: EntryKey::Bool(b),
+                        value: Some(v),
+                    });
                 }
                 _ => {
-                    saw_non_int_key = true;
+                    // Unsupported key types are ignored for value storage, but they do
+                    // affect array/object detection (matches previous behavior).
+                    only_pos_int_keys = false;
                     saw_other_key = true;
                 }
             }
         }
 
-        // If this is a dense array with only integer keys, return Array.
-        if !saw_non_int_key {
+        if only_pos_int_keys {
             if max_idx == 0 {
                 return Ok(wrkr_value::Value::Array(Vec::new()));
             }
-            if array_items.len() != max_idx || array_items.iter().any(Option::is_none) {
+            if array_entry_idx.len() != max_idx || array_entry_idx.iter().any(Option::is_none) {
                 return Err(err("sparse arrays are not supported"));
             }
-            let mut out = Vec::with_capacity(array_items.len());
-            for item in array_items {
-                let Some(item) = item else {
+
+            let mut out = Vec::with_capacity(max_idx);
+            for entry_idx in array_entry_idx {
+                let Some(entry_idx) = entry_idx else {
                     return Err(err("sparse arrays are not supported"));
                 };
-                out.push(item);
+                let Some(v) = entries[entry_idx].value.take() else {
+                    return Err(err("sparse arrays are not supported"));
+                };
+                out.push(v);
             }
             return Ok(wrkr_value::Value::Array(out));
         }
 
         // Prefer Object if keys are only strings.
         if saw_string_key && !saw_other_key {
+            let mut object_items: wrkr_value::ObjectMap = wrkr_value::ObjectMap::new();
+            object_items.reserve(entries.len());
+            for mut e in entries {
+                let EntryKey::Str(k) = e.key else {
+                    continue;
+                };
+                if let Some(v) = e.value.take() {
+                    object_items.insert(k, v);
+                }
+            }
             return Ok(wrkr_value::Value::Object(object_items));
+        }
+
+        let mut map_items: wrkr_value::MapMap = wrkr_value::MapMap::new();
+        map_items.reserve(entries.len());
+        for mut e in entries {
+            let Some(v) = e.value.take() else {
+                continue;
+            };
+
+            let mk = match e.key {
+                EntryKey::Int(i) => {
+                    if i >= 0 {
+                        wrkr_value::MapKey::U64(i as u64)
+                    } else {
+                        wrkr_value::MapKey::I64(i)
+                    }
+                }
+                EntryKey::Str(s) => wrkr_value::MapKey::String(s),
+                EntryKey::Bool(b) => wrkr_value::MapKey::Bool(b),
+            };
+            map_items.insert(mk, v);
         }
 
         Ok(wrkr_value::Value::Map(map_items))

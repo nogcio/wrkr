@@ -13,6 +13,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.3] - 2026-01-23
+
+### Added
+- Tools: add `wrkr-tools-compare-perf` harness for comparing `wrkr` performance against `wrk` and `k6`. ([6f4bb83](https://github.com/nogcio/wrkr/commit/6f4bb832c7eacc9c84979d3226f4bc0c89f3ce96))
+- gRPC: support connection pooling via a shared client and expose `pool_size` in `wrkr.grpc.Client.new` options. ([8b09ba5](https://github.com/nogcio/wrkr/commit/8b09ba5692c5b07b49e11f24b5867aaff9440ffe))
+
+### Changed
+- Tools: remove legacy perf comparison script (`tools/perf/compare_wrk.sh`) in favor of the Rust harness and dedicated tool scripts. ([6f4bb83](https://github.com/nogcio/wrkr/commit/6f4bb832c7eacc9c84979d3226f4bc0c89f3ce96))
+- gRPC: reduce metrics hot-path contention by caching tagged series and reorganizing latency tracking. ([8b09ba5](https://github.com/nogcio/wrkr/commit/8b09ba5692c5b07b49e11f24b5867aaff9440ffe), [fddea04](https://github.com/nogcio/wrkr/commit/fddea040b88f0961dfd4350a4ecf55add70e5be2))
+- `wrkr-value`: switch to `ahash` for faster hash maps. ([8b09ba5](https://github.com/nogcio/wrkr/commit/8b09ba5692c5b07b49e11f24b5867aaff9440ffe))
+
+### Fixed
+- gRPC: record response message bytes (encoded protobuf) rather than transport bytes. ([fddea04](https://github.com/nogcio/wrkr/commit/fddea040b88f0961dfd4350a4ecf55add70e5be2))
+- Lua gRPC: validate `pool_size` is a finite positive integer and within reasonable bounds. ([fddea04](https://github.com/nogcio/wrkr/commit/fddea040b88f0961dfd4350a4ecf55add70e5be2))
+- Tools: improve diagnostics output size for perf parser failures. ([fddea04](https://github.com/nogcio/wrkr/commit/fddea040b88f0961dfd4350a4ecf55add70e5be2))
+
 ## [0.0.2] - 2026-01-21
 
 ### Added

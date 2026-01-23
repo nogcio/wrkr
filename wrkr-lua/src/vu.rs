@@ -23,11 +23,12 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
         configure_module_path(&lua, script_path)?;
         modules::register(
             &lua,
-            modules::RegisterRuntime {
+            modules::RegisterContext {
                 script_path,
                 env_vars: &ctx.env,
                 vu_id: ctx.vu_id,
                 scenario: ctx.scenario.clone(),
+                max_vus: ctx.max_vus,
                 client: ctx.client,
                 stats: ctx.stats.clone(),
                 shared: ctx.shared.clone(),

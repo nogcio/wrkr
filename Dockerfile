@@ -15,6 +15,7 @@ COPY wrkr-core/Cargo.toml wrkr-core/Cargo.toml
 COPY wrkr-lua/Cargo.toml wrkr-lua/Cargo.toml
 COPY wrkr-testserver/Cargo.toml wrkr-testserver/Cargo.toml
 COPY wrkr-testserver/build.rs wrkr-testserver/build.rs
+COPY wrkr-tools-compare-perf/Cargo.toml wrkr-tools-compare-perf/Cargo.toml
 COPY wrkr-value/Cargo.toml wrkr-value/Cargo.toml
 
 # `cargo chef prepare` runs `cargo metadata`, which requires each workspace member
@@ -25,10 +26,12 @@ RUN mkdir -p \
 		wrkr-core/src \
 		wrkr-lua/src \
 		wrkr-testserver/src \
+		wrkr-tools-compare-perf/src \
 		wrkr-value/src \
 	&& printf 'fn main() {}\n' > wrkr/src/main.rs \
 	&& printf 'pub fn _docker_planner_stub() {}\n' > wrkr-core/src/lib.rs \
 	&& printf 'pub fn _docker_planner_stub() {}\n' > wrkr-lua/src/lib.rs \
+	&& printf 'fn main() {}\n' > wrkr-tools-compare-perf/src/main.rs \
 	&& printf 'pub fn _docker_planner_stub() {}\n' > wrkr-value/src/lib.rs \
 	&& printf 'pub fn _docker_planner_stub() {}\n' > wrkr-testserver/src/lib.rs \
 	&& printf 'fn main() {}\n' > wrkr-testserver/src/main.rs

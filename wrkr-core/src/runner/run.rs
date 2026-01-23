@@ -278,6 +278,8 @@ where
 
     let mut next_vu_id: u64 = 1;
 
+    let max_vus: u64 = total_vus.try_into().unwrap_or(u64::MAX);
+
     let mut handles = Vec::with_capacity(total_vus);
     for scenario in scenarios {
         let scenario_vus_max = scenario_max_vus(&scenario);
@@ -362,6 +364,7 @@ where
             next_vu_id = next_vu_id.saturating_add(1);
             let ctx = VuContext {
                 vu_id,
+                max_vus,
                 scenario: scenario_name.clone(),
                 scenario_vu,
                 script: script.clone(),

@@ -20,11 +20,12 @@ pub fn parse_script_options(
     configure_module_path(&lua, script_path)?;
     modules::register(
         &lua,
-        modules::RegisterRuntime {
+        modules::RegisterContext {
             script_path,
             env_vars,
             vu_id: 0,
             scenario: Arc::<str>::from("__wrkr_internal"),
+            max_vus: 1,
             client,
             stats,
             shared,

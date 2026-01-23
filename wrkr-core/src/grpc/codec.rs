@@ -1,6 +1,11 @@
 use bytes::Buf as _;
 use prost::Message as _;
 
+#[derive(Debug)]
+pub(super) struct DecodedDynamicMessage {
+    pub(super) msg: prost_reflect::DynamicMessage,
+}
+
 #[derive(Clone)]
 pub(super) struct DynamicMessageCodec {
     response_desc: prost_reflect::MessageDescriptor,
@@ -14,7 +19,7 @@ impl DynamicMessageCodec {
 
 impl tonic::codec::Codec for DynamicMessageCodec {
     type Encode = prost_reflect::DynamicMessage;
-    type Decode = prost_reflect::DynamicMessage;
+    type Decode = DecodedDynamicMessage;
     type Encoder = DynamicMessageEncoder;
     type Decoder = DynamicMessageDecoder;
 
@@ -53,7 +58,7 @@ pub(super) struct DynamicMessageDecoder {
 }
 
 impl tonic::codec::Decoder for DynamicMessageDecoder {
-    type Item = prost_reflect::DynamicMessage;
+    type Item = DecodedDynamicMessage;
     type Error = tonic::Status;
 
     fn decode(
@@ -64,9 +69,9 @@ impl tonic::codec::Decoder for DynamicMessageDecoder {
             return Ok(None);
         }
 
-        let bytes = src.copy_to_bytes(src.remaining());
-        let msg = prost_reflect::DynamicMessage::decode(self.desc.clone(), bytes)
+        let msg = prost_reflect::DynamicMessage::decode(self.desc.clone(), &mut *src)
             .map_err(|e| tonic::Status::internal(e.to_string()))?;
-        Ok(Some(msg))
+
+        Ok(Some(DecodedDynamicMessage { msg }))
     }
 }
