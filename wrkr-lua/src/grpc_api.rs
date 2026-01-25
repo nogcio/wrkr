@@ -90,12 +90,7 @@ fn grpc_error_kind(err: &wrkr_core::GrpcError) -> wrkr_core::GrpcTransportErrorK
     err.transport_error_kind()
 }
 
-pub fn create_grpc_module(
-    lua: &Lua,
-    script_path: Option<&Path>,
-    max_vus: u64,
-    stats: Arc<wrkr_core::runner::RunStats>,
-) -> Result<Table> {
+pub fn create_grpc_module(lua: &Lua, script_path: Option<&Path>, max_vus: u64) -> Result<Table> {
     let grpc_tbl = lua.create_table()?;
 
     // grpc.Client.new(opts?) -> client
@@ -104,7 +99,6 @@ pub fn create_grpc_module(
     let script_path = script_path.map(PathBuf::from);
 
     let new_fn = {
-        let stats = stats.clone();
         let script_path = script_path.clone();
         lua.create_function(move |lua, opts: Option<Table>| {
             let mut pool_size = grpc_shared::default_pool_size(max_vus);
@@ -150,7 +144,7 @@ pub fn create_grpc_module(
                 pool_size = requested;
             }
 
-            let shared = grpc_shared::get_or_create(&stats, pool_size);
+            let shared = grpc_shared::get_or_create(pool_size);
             let client_obj = lua.create_table()?;
 
             // load(paths, file) -> true | (nil, err)
@@ -230,7 +224,6 @@ pub fn create_grpc_module(
             // Otherwise `req` is converted from Lua -> wrkr_value::Value and encoded.
             let invoke_fn = {
                 let shared = shared.clone();
-                let stats = stats.clone();
                 lua.create_async_function(
                     move |lua,
                           (_this, full_method, req, opts): (
@@ -240,7 +233,6 @@ pub fn create_grpc_module(
                         Option<Table>,
                     )| {
                         let shared = shared.clone();
-                        let stats = stats.clone();
                         async move {
                             let started = std::time::Instant::now();
                             let client = shared.client();
@@ -343,20 +335,7 @@ pub fn create_grpc_module(
                             };
 
                             match res {
-                                Ok(res) => {
-                                    stats.record_grpc_request(
-                                        wrkr_core::runner::GrpcRequestMeta {
-                                            method: wrkr_core::runner::GrpcCallKind::Unary,
-                                            name: metric_name,
-                                            status: res.status,
-                                            transport_error_kind: res.transport_error_kind,
-                                            elapsed: res.elapsed,
-                                            bytes_received: res.bytes_received,
-                                            bytes_sent: res.bytes_sent,
-                                        },
-                                        &tags,
-                                    );
-
+                                Ok(res) => { 
                                     t.set("ok", res.ok)?;
                                     if let Some(status) = res.status {
                                         t.set("status", status)?;
@@ -382,21 +361,6 @@ pub fn create_grpc_module(
                                 }
                                 Err(err) => {
                                     let kind = grpc_error_kind(&err);
-
-                                    // best-effort metrics on transport errors
-                                    stats.record_grpc_request(
-                                        wrkr_core::runner::GrpcRequestMeta {
-                                            method: wrkr_core::runner::GrpcCallKind::Unary,
-                                            name: metric_name,
-                                            status: None,
-                                            transport_error_kind: Some(kind),
-                                            elapsed: started.elapsed(),
-                                            bytes_received: 0,
-                                            bytes_sent: 0,
-                                        },
-                                        &tags,
-                                    );
-
                                     t.set("ok", false)?;
                                     t.set("status", Value::Nil)?;
                                     t.set("error_kind", kind.to_string())?;

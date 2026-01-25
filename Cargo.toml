@@ -4,6 +4,7 @@ members = [
     "wrkr",
     "wrkr-core",
     "wrkr-lua",
+    "wrkr-metrics",
     "wrkr-testserver",
     "wrkr-value",
 ]

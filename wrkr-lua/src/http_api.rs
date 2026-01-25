@@ -16,19 +16,13 @@ struct HttpRequestOptions {
     name: Option<String>,
 }
 
-pub fn create_http_module(
-    lua: &Lua,
-    client: Arc<wrkr_core::HttpClient>,
-    stats: Arc<wrkr_core::runner::RunStats>,
-) -> Result<Table> {
+pub fn create_http_module(lua: &Lua, client: Arc<wrkr_core::HttpClient>) -> Result<Table> {
     // http.get(url, opts?) -> { status = 200, body = "...", error? = "..." }
     let http_tbl = lua.create_table()?;
     let http_get = {
         let client = client.clone();
-        let stats = stats.clone();
         lua.create_async_function(move |lua, (url, opts): (String, Option<Table>)| {
             let client = client.clone();
-            let stats = stats.clone();
             async move {
                 let opts = parse_http_opts(opts).map_err(mlua::Error::external)?;
                 let request_url = apply_params_owned(url, &opts.params);
@@ -54,19 +48,6 @@ pub fn create_http_module(
                 match res {
                     Ok(res) => {
                         let bytes_received = res.bytes_received;
-                        stats.record_http_request(
-                            wrkr_core::runner::HttpRequestMeta {
-                                method: "GET",
-                                name: &metric_name,
-                                status: Some(res.status),
-                                transport_error_kind: None,
-                                elapsed,
-                                bytes_received,
-                                bytes_sent,
-                            },
-                            &tags,
-                        );
-
                         let t = lua.create_table()?;
                         t.set("status", res.status)?;
                         let body = res.body_utf8().unwrap_or("");
@@ -75,19 +56,6 @@ pub fn create_http_module(
                     }
                     Err(err) => {
                         let err_kind = err.transport_error_kind();
-                        stats.record_http_request(
-                            wrkr_core::runner::HttpRequestMeta {
-                                method: "GET",
-                                name: &metric_name,
-                                status: None,
-                                transport_error_kind: Some(err_kind),
-                                elapsed,
-                                bytes_received: 0,
-                                bytes_sent,
-                            },
-                            &tags,
-                        );
-
                         let t = lua.create_table()?;
                         t.set("status", 0)?;
                         t.set("body", "")?;
@@ -103,11 +71,9 @@ pub fn create_http_module(
     // http.post(url, body, opts?)
     let http_post = {
         let client = client.clone();
-        let stats = stats.clone();
         lua.create_async_function(
             move |lua, (url, body, opts): (String, Value, Option<Table>)| {
                 let client = client.clone();
-                let stats = stats.clone();
                 async move {
                     let opts = parse_http_opts(opts).map_err(mlua::Error::external)?;
                     let request_url = apply_params_owned(url, &opts.params);
@@ -142,32 +108,14 @@ pub fn create_http_module(
                             .push(("content-type".to_string(), default_content_type.to_string()));
                     }
 
-                    let started = Instant::now();
                     let mut req = wrkr_core::HttpRequest::post_owned(request_url, body);
                     req.headers = headers;
                     req.timeout = opts.timeout;
 
-                    let bytes_sent = wrkr_core::estimate_http_request_bytes(&req).unwrap_or(0);
-
                     let res = client.request(req).await;
-                    let elapsed = started.elapsed();
 
                     match res {
                         Ok(res) => {
-                            let bytes_received = res.bytes_received;
-                            stats.record_http_request(
-                                wrkr_core::runner::HttpRequestMeta {
-                                    method: "POST",
-                                    name: &metric_name,
-                                    status: Some(res.status),
-                                    transport_error_kind: None,
-                                    elapsed,
-                                    bytes_received,
-                                    bytes_sent,
-                                },
-                                &tags,
-                            );
-
                             let t = lua.create_table()?;
                             t.set("status", res.status)?;
                             let body = res.body_utf8().unwrap_or("");
@@ -175,20 +123,6 @@ pub fn create_http_module(
                             Ok(t)
                         }
                         Err(err) => {
-                            let err_kind = err.transport_error_kind();
-                            stats.record_http_request(
-                                wrkr_core::runner::HttpRequestMeta {
-                                    method: "POST",
-                                    name: &metric_name,
-                                    status: None,
-                                    transport_error_kind: Some(err_kind),
-                                    elapsed,
-                                    bytes_received: 0,
-                                    bytes_sent,
-                                },
-                                &tags,
-                            );
-
                             let t = lua.create_table()?;
                             t.set("status", 0)?;
                             t.set("body", "")?;
@@ -203,89 +137,6 @@ pub fn create_http_module(
     http_tbl.set("post", http_post)?;
 
     Ok(http_tbl)
-}
-
-pub fn create_check_function(
-    lua: &Lua,
-    stats: Arc<wrkr_core::runner::RunStats>,
-) -> Result<mlua::Function> {
-    // check(res, { ["name"] = function(r) return ... end, ... }) -> bool
-    let check_fn = {
-        let handles_cache: RefCell<HashMap<Box<str>, wrkr_core::runner::CheckHandle>> =
-            RefCell::new(HashMap::new());
-
-        lua.create_function(move |_lua, (res, checks): (Table, Table)| {
-            let mut all_ok = true;
-            for pair in checks.pairs::<Value, Value>() {
-                let (k, v) = pair?;
-                let f = match v {
-                    Value::Function(f) => f,
-                    _ => continue,
-                };
-
-                match k {
-                    Value::String(s) => {
-                        let ok: bool = f.call(res.clone())?;
-                        if let Ok(name_borrowed) = s.to_str() {
-                            let name = name_borrowed.as_ref();
-                            let handle = {
-                                let mut cache = handles_cache.borrow_mut();
-                                if let Some(h) = cache.get(name) {
-                                    h.clone()
-                                } else {
-                                    let h = stats.check_handle(name);
-                                    cache.insert(name.to_owned().into_boxed_str(), h.clone());
-                                    h
-                                }
-                            };
-
-                            stats.record_check_handle(&handle, ok);
-                        } else {
-                            // Note: this allocates, but only for truly non-UTF8 keys.
-                            let name_owned = s.to_string_lossy();
-                            let name = name_owned.as_str();
-
-                            let handle = {
-                                let mut cache = handles_cache.borrow_mut();
-                                if let Some(h) = cache.get(name) {
-                                    h.clone()
-                                } else {
-                                    let h = stats.check_handle(name);
-                                    cache.insert(name.to_owned().into_boxed_str(), h.clone());
-                                    h
-                                }
-                            };
-
-                            stats.record_check_handle(&handle, ok);
-                        }
-                        if !ok {
-                            all_ok = false;
-                        }
-                    }
-                    _ => {
-                        let ok: bool = f.call(res.clone())?;
-                        let handle = {
-                            let mut cache = handles_cache.borrow_mut();
-                            if let Some(h) = cache.get("<unnamed>") {
-                                h.clone()
-                            } else {
-                                let h = stats.check_handle("<unnamed>");
-                                cache.insert("<unnamed>".to_owned().into_boxed_str(), h.clone());
-                                h
-                            }
-                        };
-
-                        stats.record_check_handle(&handle, ok);
-                        if !ok {
-                            all_ok = false;
-                        }
-                    }
-                }
-            }
-            Ok(all_ok)
-        })?
-    };
-    Ok(check_fn)
 }
 
 fn parse_http_opts(opts: Option<Table>) -> Result<HttpRequestOptions> {

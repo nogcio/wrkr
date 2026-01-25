@@ -30,6 +30,7 @@ tokio = { version = "1", features = [
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 wrkr-core = { path = "../wrkr-core" }
+wrkr-metrics = { path = "../wrkr-metrics" }
 wrkr-value = { path = "../wrkr-value" }
 
 [dev-dependencies]

@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct LiveMetrics {
     /// Requests/sec observed during the last progress interval.
     pub rps_now: f64,
@@ -53,7 +53,7 @@ pub struct LiveMetrics {
     pub iterations_total: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct StageProgress {
     /// 1-based stage index.
     pub stage: usize,

@@ -5,15 +5,14 @@ use mlua::{Lua, Table};
 
 use crate::Result;
 
-mod check;
 mod debug;
 mod env;
 mod fs;
+mod check;
 mod group;
 mod grpc;
 mod http;
 mod json;
-mod metrics;
 mod shared;
 mod uuid;
 mod vu;
@@ -32,16 +31,15 @@ pub struct RegisterContext<'a> {
     pub vu_id: u64,
     pub max_vus: u64,
     pub client: Arc<wrkr_core::HttpClient>,
-    pub stats: Arc<wrkr_core::runner::RunStats>,
     pub shared: Arc<wrkr_core::runner::SharedStore>,
+    pub metrics: Arc<wrkr_metrics::Registry>,
 }
 
 pub fn register(lua: &Lua, ctx: RegisterContext<'_>) -> Result<()> {
-    http::register_runtime(lua, ctx.client.clone(), ctx.stats.clone())?;
-    grpc::register_runtime(lua, ctx.script_path, ctx.max_vus, ctx.stats.clone())?;
-    check::register_runtime(lua, ctx.stats.clone())?;
-    metrics::register_runtime(lua, ctx.stats.clone())?;
+    http::register_runtime(lua, ctx.client.clone())?;
+    grpc::register_runtime(lua, ctx.script_path, ctx.max_vus)?;
     env::register_runtime(lua, ctx.env_vars)?;
+    check::register(lua, ctx.metrics)?;
     fs::register(lua, ctx.script_path)?;
     debug::register(lua)?;
     json::register(lua)?;

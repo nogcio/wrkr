@@ -50,13 +50,8 @@ impl GrpcClient {
         let mut grpc = tonic::client::Grpc::new(channel);
         let codec = BytesCodec;
 
-        let res = async {
-            grpc.ready()
-                .await
-                .map_err(|e| tonic::Status::unknown(format!("Service was not ready: {e}")))?;
-            grpc.unary(request, path, codec).await
-        }
-        .await;
+        grpc.ready().await.map_err(Error::Connect)?;
+        let res = grpc.unary(request, path, codec).await;
 
         let elapsed = started.elapsed();
 

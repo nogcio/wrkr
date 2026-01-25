@@ -24,15 +24,6 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     };
 
     out.print_summary(&summary)?;
-
-    if summary.checks_failed > 0 || !threshold_violations.is_empty() {
-        anyhow::bail!(
-            "run failed: checks_failed={}, thresholds_failed={}",
-            summary.checks_failed,
-            threshold_violations.len()
-        );
-    }
-
     Ok(())
 }
 
@@ -66,22 +57,15 @@ async fn run_lua_script(
     Vec<wrkr_core::runner::ThresholdViolation>,
 )> {
     let shared = Arc::new(wrkr_core::runner::SharedStore::default());
+    let metrics = Arc::new(wrkr_metrics::Registry::default());
 
     let options_client = Arc::new(wrkr_core::HttpClient::default());
-    let options_stats = Arc::new(wrkr_core::runner::RunStats::default());
 
-    let opts = wrkr_lua::parse_script_options(
-        script,
-        script_path,
-        env,
-        options_client,
-        options_stats,
-        shared.clone(),
-    )
-    .context("failed to parse lua options")?;
+    let opts =
+        wrkr_lua::parse_script_options(script, script_path, env, options_client, shared.clone(), metrics.clone())
+            .context("failed to parse lua options")?;
 
-    let thresholds = opts.thresholds.clone();
-    wrkr_lua::run_setup(script, script_path, env, shared.clone()).context("lua Setup failed")?;
+    wrkr_lua::run_setup(script, script_path, env, shared.clone(), metrics.clone()).context("lua Setup failed")?;
 
     let scenarios =
         wrkr_core::runner::scenarios_from_options(opts, cfg).context("invalid scenario config")?;
@@ -95,6 +79,7 @@ async fn run_lua_script(
         scenarios,
         env.clone(),
         shared.clone(),
+        metrics.clone(),
         wrkr_lua::run_vu,
         progress,
     )
@@ -102,24 +87,13 @@ async fn run_lua_script(
     .context("lua run failed")?;
 
     // Always attempt Teardown/HandleSummary (even if thresholds will fail).
-    wrkr_lua::run_teardown(script, script_path, env, shared.clone())
+    wrkr_lua::run_teardown(script, script_path, env, shared.clone(), metrics.clone())
         .context("lua Teardown failed")?;
 
-    run_lua_handle_summary(
-        args.output,
-        script,
-        script_path,
-        env,
-        &summary,
-        shared.clone(),
-    )
-    .context("lua HandleSummary failed")?;
+    run_lua_handle_summary(args.output, script, script_path, env, shared.clone(), metrics.clone())
+        .context("lua HandleSummary failed")?;
 
-    let violations = wrkr_core::runner::evaluate_thresholds(&thresholds, &summary.metrics)
-        .map_err(|msg| anyhow::anyhow!(msg))?;
-    print_threshold_violations(&violations);
-
-    Ok((summary, violations))
+    Ok((summary, vec![]))
 }
 
 fn run_lua_handle_summary(
@@ -127,10 +101,10 @@ fn run_lua_handle_summary(
     script: &str,
     script_path: Option<&Path>,
     env: &wrkr_core::runner::EnvVars,
-    summary: &wrkr_core::runner::RunSummary,
     shared: Arc<wrkr_core::runner::SharedStore>,
+    metrics: Arc<wrkr_metrics::Registry>,
 ) -> anyhow::Result<()> {
-    let outputs = wrkr_lua::run_handle_summary(script, script_path, env, summary, shared)?;
+    let outputs = wrkr_lua::run_handle_summary(script, script_path, env, shared, metrics)?;
 
     if let Some(outputs) = &outputs {
         let cwd = std::env::current_dir().context("failed to resolve current working directory")?;

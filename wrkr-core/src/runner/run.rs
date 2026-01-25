@@ -5,6 +5,7 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 use crate::HttpClient;
+use crate::runner::RunSummary;
 
 use super::config::{
     RunConfig, ScenarioConfig, ScenarioExecutor, ScenarioExecutorKind, ScriptOptions,
@@ -15,7 +16,6 @@ use super::pacer::ArrivalPacer;
 use super::progress::{LiveMetrics, ProgressFn, ProgressUpdate, ScenarioProgress, StageProgress};
 use super::schedule::RampingU64Schedule;
 use super::shared::SharedStore;
-use super::stats::{RunStats, RunSummary};
 use super::vu::{EnvVars, StartSignal, VuContext, VuWork};
 use tokio::sync::Barrier;
 use tokio::time::MissedTickBehavior;
@@ -206,6 +206,7 @@ pub async fn run_scenarios<F, Fut, E>(
     scenarios: Vec<ScenarioConfig>,
     env: EnvVars,
     shared: Arc<SharedStore>,
+    metrics: Arc<wrkr_metrics::Registry>,
     vu: F,
     progress: Option<ProgressFn>,
 ) -> Result<RunSummary>
@@ -215,11 +216,9 @@ where
     E: std::error::Error + Send + Sync + 'static,
 {
     let client = Arc::new(HttpClient::default());
-    let stats = Arc::new(RunStats::default());
 
     let script: Arc<str> = Arc::from(script);
     let script_path = script_path.map(|p| Arc::new(p.to_path_buf()));
-    let shared = shared;
 
     let scenario_max_vus = |s: &ScenarioConfig| -> u64 {
         match &s.executor {
@@ -370,10 +369,10 @@ where
                 script_path: script_path.clone(),
                 exec: exec.clone(),
                 client: client.clone(),
-                stats: stats.clone(),
                 work: work.clone(),
                 env: env.clone(),
 
+                metrics: metrics.clone(),
                 shared: shared.clone(),
 
                 run_started: run_started.clone(),
@@ -422,18 +421,12 @@ where
     let progress_handle = progress.as_ref().map(|progress| {
         let progress = progress.clone();
         let scenarios = progress_scenarios.clone();
-        let stats = stats.clone();
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
             let mut tick_id: u64 = 0;
             let mut last_at = Instant::now();
-            let mut last_http_requests_total = stats.http_requests_total();
-            let mut last_grpc_requests_total = stats.grpc_requests_total();
-            let mut last_bytes_received_total = stats.bytes_received_total();
-            let mut last_bytes_sent_total = stats.bytes_sent_total();
-
             loop {
                 interval.tick().await;
 
@@ -443,77 +436,6 @@ where
                 last_at = now;
 
                 let elapsed = started.elapsed();
-
-                let http_requests_total = stats.http_requests_total();
-                let delta_http_req = http_requests_total.saturating_sub(last_http_requests_total);
-                last_http_requests_total = http_requests_total;
-                let http_rps_now = (delta_http_req as f64) / dt.as_secs_f64().max(1e-9);
-
-                let grpc_requests_total = stats.grpc_requests_total();
-                let delta_grpc_req = grpc_requests_total.saturating_sub(last_grpc_requests_total);
-                last_grpc_requests_total = grpc_requests_total;
-                let grpc_rps_now = (delta_grpc_req as f64) / dt.as_secs_f64().max(1e-9);
-
-                let rps_now = http_rps_now + grpc_rps_now;
-                stats.record_rps_sample(rps_now);
-
-                let bytes_received_total = stats.bytes_received_total();
-                let delta_bytes = bytes_received_total.saturating_sub(last_bytes_received_total);
-                last_bytes_received_total = bytes_received_total;
-                let bytes_received_per_sec_now =
-                    (delta_bytes as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
-
-                let bytes_sent_total = stats.bytes_sent_total();
-                let delta_sent = bytes_sent_total.saturating_sub(last_bytes_sent_total);
-                last_bytes_sent_total = bytes_sent_total;
-                let bytes_sent_per_sec_now =
-                    (delta_sent as f64 / dt.as_secs_f64().max(1e-9)).round() as u64;
-
-                let (lat_p50_ms, lat_p95_ms) = stats.take_latency_window_ms();
-
-                let latency = stats.latency_snapshot_ms();
-                let (req_per_sec_avg, req_per_sec_stdev, req_per_sec_max, req_per_sec_stdev_pct) =
-                    stats.req_per_sec_summary();
-                let checks_failed_total = stats.checks_failed_total();
-                let checks_failed = stats.errors_snapshot();
-
-                let iterations_total = stats.iterations_total();
-                let failed_requests_total = stats.failed_requests_total();
-                let requests_total = stats.requests_total();
-
-                let latency_stdev_pct = if latency.mean_ms > 0.0 {
-                    (latency.stdev_ms / latency.mean_ms) * 100.0
-                } else {
-                    0.0
-                };
-
-                let metrics = LiveMetrics {
-                    rps_now,
-                    bytes_received_per_sec_now,
-                    bytes_sent_per_sec_now,
-                    requests_total,
-                    bytes_received_total,
-                    bytes_sent_total,
-                    failed_requests_total,
-                    checks_failed_total,
-                    req_per_sec_avg,
-                    req_per_sec_stdev,
-                    req_per_sec_max,
-                    req_per_sec_stdev_pct,
-                    latency_mean_ms: latency.mean_ms,
-                    latency_stdev_ms: latency.stdev_ms,
-                    latency_max_ms: latency.max_ms,
-                    latency_p50_ms: latency.p50_ms,
-                    latency_p75_ms: latency.p75_ms,
-                    latency_p90_ms: latency.p90_ms,
-                    latency_p99_ms: latency.p99_ms,
-                    latency_stdev_pct,
-                    latency_distribution_ms: latency.distribution_ms,
-                    checks_failed,
-                    latency_p50_ms_now: lat_p50_ms,
-                    latency_p95_ms_now: lat_p95_ms,
-                    iterations_total,
-                };
 
                 for s in &scenarios {
                     let progress_val = match &s.progress {
@@ -572,7 +494,7 @@ where
                         elapsed,
                         scenario: s.name.clone(),
                         exec: s.exec.clone(),
-                        metrics: metrics.clone(),
+                        metrics: LiveMetrics::default(),
                         progress: progress_val,
                     });
                 }
@@ -583,7 +505,6 @@ where
     // Start any arrival-rate pacers after we start the VUs (so we don't build up backlog
     // while VUs are still waiting on the start signal).
     for (pacer, schedule, time_unit, total_duration) in pacers {
-        let stats = stats.clone();
         handles.push(tokio::spawn(async move {
             let tick = std::time::Duration::from_millis(10);
             let mut interval = tokio::time::interval(tick);
@@ -613,7 +534,6 @@ where
                 let dropped = pacer.dropped_total();
                 let delta = dropped.saturating_sub(last_dropped);
                 if delta != 0 {
-                    stats.record_dropped_iterations(delta);
                     last_dropped = dropped;
                 }
             }
@@ -632,5 +552,5 @@ where
         let _ = h.await;
     }
 
-    Ok(stats.summarize(started.elapsed()).await)
+    Ok(RunSummary::default())
 }

@@ -1,6 +1,4 @@
-pub use wrkr_core::runner::{
-    RunConfig, RunSummary, ScenarioConfig, ScenarioOptions, ScriptOptions,
-};
+pub use wrkr_core::runner::{RunConfig, ScenarioConfig, ScenarioOptions, ScriptOptions};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -70,7 +68,6 @@ mod http_api;
 mod json_util;
 mod lifecycle;
 mod loader;
-mod metrics_api;
 mod modules;
 mod options;
 mod value_util;

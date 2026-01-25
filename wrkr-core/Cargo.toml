@@ -16,6 +16,7 @@ http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 wrkr-value = { path = "../wrkr-value" }
+wrkr-metrics = { path = "../wrkr-metrics" }
 prost = { workspace = true }
 prost-reflect = { workspace = true }
 prost-types = { workspace = true }
@@ -30,6 +31,7 @@ tokio = { version = "1", features = [
 ] }
 tonic = { workspace = true, features = ["tls-webpki-roots", "tls-ring"] }
 url = "2"
+dashmap = "6.1.0"
 
 [lints]
 workspace = true

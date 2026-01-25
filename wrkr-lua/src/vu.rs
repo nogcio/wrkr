@@ -28,9 +28,9 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                 env_vars: &ctx.env,
                 vu_id: ctx.vu_id,
                 max_vus: ctx.max_vus,
-                client: ctx.client,
-                stats: ctx.stats.clone(),
+                client: ctx.client.clone(),
                 shared: ctx.shared.clone(),
+                metrics: ctx.metrics.clone(),
             },
         )?;
 
@@ -78,6 +78,8 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
         .copied()
         .unwrap_or_else(std::time::Instant::now);
 
+    let _active_guard = ctx.enter_active_vu();
+
     let create_exec_coroutine: Option<mlua::Function> = if debugging {
         Some(
             lua.load(r#"return function(f) return coroutine.create(f) end"#)
@@ -112,8 +114,10 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
         wrkr_core::runner::VuWork::Constant { gate } => {
             while gate.next() {
                 let started = Instant::now();
-                run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                ctx.stats.record_iteration(started.elapsed());
+                let res = run_one(create_exec_coroutine.as_ref(), &exec_fn).await;
+                let elapsed = started.elapsed();
+                ctx.record_iteration(elapsed, res.is_ok());
+                res?;
             }
         }
         wrkr_core::runner::VuWork::RampingVus { schedule } => loop {
@@ -130,8 +134,10 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
             }
 
             let started = Instant::now();
-            run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-            ctx.stats.record_iteration(started.elapsed());
+            let res = run_one(create_exec_coroutine.as_ref(), &exec_fn).await;
+            let elapsed = started.elapsed();
+            ctx.record_iteration(elapsed, res.is_ok());
+            res?;
         },
         wrkr_core::runner::VuWork::RampingArrivalRate {
             schedule, pacer, ..
@@ -144,8 +150,10 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                         break;
                     }
                     let started = Instant::now();
-                    run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                    ctx.stats.record_iteration(started.elapsed());
+                    let res = run_one(create_exec_coroutine.as_ref(), &exec_fn).await;
+                    let elapsed = started.elapsed();
+                    ctx.record_iteration(elapsed, res.is_ok());
+                    res?;
                     continue;
                 }
 
@@ -160,8 +168,10 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                 }
 
                 let started = Instant::now();
-                run_one(create_exec_coroutine.as_ref(), &exec_fn).await?;
-                ctx.stats.record_iteration(started.elapsed());
+                let res = run_one(create_exec_coroutine.as_ref(), &exec_fn).await;
+                let elapsed = started.elapsed();
+                ctx.record_iteration(elapsed, res.is_ok());
+                res?;
             }
         }
     }

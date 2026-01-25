@@ -12,8 +12,8 @@ pub fn parse_script_options(
     script_path: Option<&Path>,
     env_vars: &wrkr_core::runner::EnvVars,
     client: Arc<wrkr_core::HttpClient>,
-    stats: Arc<wrkr_core::runner::RunStats>,
     shared: Arc<wrkr_core::runner::SharedStore>,
+    metrics: Arc<wrkr_metrics::Registry>,
 ) -> Result<wrkr_core::runner::ScriptOptions> {
     // Parse `options`/`options.scenarios` using a dedicated Lua state (no globals needed).
     let lua = Lua::new();
@@ -26,8 +26,8 @@ pub fn parse_script_options(
             vu_id: 0,
             max_vus: 1,
             client,
-            stats,
             shared,
+            metrics,
         },
     )?;
     let chunk_name = chunk_name(script_path);

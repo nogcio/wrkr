@@ -165,7 +165,6 @@ impl SharedGrpcClient {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 struct RegistryKey {
-    run_id: u64,
     pool_size: usize,
 }
 
@@ -179,12 +178,8 @@ pub(crate) fn default_pool_size(max_vus: u64) -> usize {
     (vus / 8).clamp(16, 64).max(1)
 }
 
-pub(crate) fn get_or_create(
-    stats: &Arc<wrkr_core::runner::RunStats>,
-    pool_size: usize,
-) -> Arc<SharedGrpcClient> {
+pub(crate) fn get_or_create(pool_size: usize) -> Arc<SharedGrpcClient> {
     let key = RegistryKey {
-        run_id: stats.run_id(),
         pool_size: pool_size.max(1),
     };
 
