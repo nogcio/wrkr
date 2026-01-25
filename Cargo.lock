@@ -2144,7 +2144,6 @@ dependencies = [
  "tokio",
  "wrkr-core",
  "wrkr-lua",
- "wrkr-metrics",
  "wrkr-testserver",
 ]
 
@@ -2163,6 +2162,7 @@ dependencies = [
  "wrkr-grpc",
  "wrkr-http",
  "wrkr-metrics",
+ "wrkr-shared",
  "wrkr-value",
 ]
 
@@ -2212,6 +2212,8 @@ dependencies = [
  "url",
  "uuid",
  "wrkr-core",
+ "wrkr-grpc",
+ "wrkr-http",
  "wrkr-metrics",
  "wrkr-testserver",
  "wrkr-value",
@@ -2228,6 +2230,15 @@ dependencies = [
  "smallvec",
  "strum",
  "thiserror",
+]
+
+[[package]]
+name = "wrkr-shared"
+version = "0.0.6"
+dependencies = [
+ "thiserror",
+ "tokio",
+ "wrkr-value",
 ]
 
 [[package]]

@@ -49,7 +49,7 @@
 			- The CLI reads the script and runs `wrkr_lua::parse_script_options(...)` in a dedicated Lua state.
 			- The script is executed once to read global `options` and (optionally) `options.scenarios`.
 		- Phase 2: run scenarios.
-			- Scenarios are derived from options (`wrkr_core::runner::scenarios_from_options`) and then executed (`wrkr_core::runner::run_scenarios`).
+			- Scenarios are derived from options (`wrkr_core::scenarios_from_options`) and then executed (`wrkr_core::run_scenarios`).
 			- Each VU runs `wrkr_lua::run_vu(...)`, which creates its own Lua state, registers the `wrkr/*` modules, executes the script, then repeatedly calls the selected entry function (`Default()` or `exec` per scenario).
 	- **Sandboxing / limits**:
 		- `wrkr` does not implement a CPU/time/memory sandbox for Lua scripts (a script can busy-loop).

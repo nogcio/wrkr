@@ -9,8 +9,11 @@ pub async fn init(args: InitArgs) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("failed to create dir: {}", root.display()))?;
 
+    #[cfg(feature = "lua")]
     write_luals_stubs(&root, args.force).await?;
+    #[cfg(feature = "lua")]
     write_luarc(&root, args.force).await?;
+
     write_example_script(&root, &args.script, args.force).await?;
 
     if args.vscode {
@@ -20,6 +23,7 @@ pub async fn init(args: InitArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "lua")]
 async fn write_luals_stubs(root: &Path, force: bool) -> anyhow::Result<()> {
     let stubs_root = root.join(".wrkr").join("lua-stubs");
     tokio::fs::create_dir_all(&stubs_root)

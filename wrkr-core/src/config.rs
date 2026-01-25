@@ -1,3 +1,4 @@
+use crate::MetricsContext;
 use std::time::Duration;
 
 #[derive(Debug, Clone)]
@@ -61,8 +62,8 @@ impl ScenarioExecutorKind {
 
 #[derive(Debug, Clone)]
 pub struct ScenarioConfig {
-    pub name: String,
     pub exec: String,
+    pub metrics_ctx: MetricsContext,
     pub executor: ScenarioExecutor,
     pub iterations: Option<u64>,
     pub duration: Option<Duration>,
@@ -83,6 +84,9 @@ pub struct ScriptOptions {
 pub struct ScenarioOptions {
     pub name: String,
     pub exec: Option<String>,
+
+    /// Scenario-level metric tags (k6-style `options.scenarios[*].tags`).
+    pub tags: Vec<(String, String)>,
 
     /// Scenario executor. If missing, defaults to constant VUs.
     pub executor: Option<String>,

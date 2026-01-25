@@ -5,6 +5,28 @@ use std::time::Duration;
 
 use tokio::sync::OnceCell;
 
+use crate::{ConnectOptions, GrpcClient, GrpcMethod, ProtoError, ProtoSchema};
+
+pub type Result<T> = std::result::Result<T, Error>;
+
+#[derive(Debug, thiserror::Error)]
+pub enum Error {
+    #[error("grpc client: load() called multiple times with different arguments")]
+    LoadSpecMismatch,
+
+    #[error("grpc client: connect() called multiple times with different arguments")]
+    ConnectSpecMismatch,
+
+    #[error("grpc client: call load() first")]
+    NotLoaded,
+
+    #[error(transparent)]
+    Proto(#[from] ProtoError),
+
+    #[error(transparent)]
+    Grpc(#[from] crate::Error),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct LoadSpec {
     include_paths: Vec<PathBuf>,
@@ -28,16 +50,16 @@ struct ConnectSpecTls {
 }
 
 #[derive(Debug)]
-pub(crate) struct SharedGrpcClient {
+pub struct SharedGrpcClient {
     pool_size: usize,
 
     load_lock: Mutex<()>,
     load_spec: OnceLock<LoadSpec>,
-    schema: OnceLock<Arc<wrkr_core::ProtoSchema>>,
-    methods: RwLock<HashMap<Arc<str>, Arc<wrkr_core::GrpcMethod>>>,
+    schema: OnceLock<Arc<ProtoSchema>>,
+    methods: RwLock<HashMap<Arc<str>, Arc<GrpcMethod>>>,
 
     connect_spec: Mutex<Option<ConnectSpec>>,
-    client: OnceCell<Arc<wrkr_core::GrpcClient>>,
+    client: OnceCell<Arc<GrpcClient>>,
 }
 
 impl SharedGrpcClient {
@@ -53,11 +75,7 @@ impl SharedGrpcClient {
         }
     }
 
-    pub(crate) fn load(
-        &self,
-        include_paths: Vec<PathBuf>,
-        proto_file: PathBuf,
-    ) -> Result<(), String> {
+    pub fn load(&self, include_paths: Vec<PathBuf>, proto_file: PathBuf) -> Result<()> {
         let _guard = self.load_lock.lock().unwrap_or_else(|p| p.into_inner());
 
         let spec = LoadSpec {
@@ -67,17 +85,12 @@ impl SharedGrpcClient {
 
         if let Some(existing) = self.load_spec.get() {
             if existing != &spec {
-                return Err(
-                    "grpc client: load() called multiple times with different arguments"
-                        .to_string(),
-                );
+                return Err(Error::LoadSpecMismatch);
             }
             return Ok(());
         }
 
-        let schema =
-            wrkr_core::ProtoSchema::compile_from_proto(&spec.proto_file, &spec.include_paths)
-                .map_err(|e| e.to_string())?;
+        let schema = ProtoSchema::compile_from_proto(&spec.proto_file, &spec.include_paths)?;
 
         // First successful load wins.
         let _ = self.load_spec.set(spec);
@@ -91,7 +104,7 @@ impl SharedGrpcClient {
         Ok(())
     }
 
-    pub(crate) fn method(&self, full_method: &str) -> Result<Arc<wrkr_core::GrpcMethod>, String> {
+    pub fn method(&self, full_method: &str) -> Result<Arc<GrpcMethod>> {
         if let Some(existing) = self
             .methods
             .read()
@@ -102,24 +115,15 @@ impl SharedGrpcClient {
             return Ok(existing);
         }
 
-        let schema = self
-            .schema
-            .get()
-            .ok_or_else(|| "grpc client: call load() first".to_string())?;
-
-        let m = schema.method(full_method).map_err(|e| e.to_string())?;
-        let m = Arc::new(m);
+        let schema = self.schema.get().ok_or(Error::NotLoaded)?;
+        let method = Arc::new(schema.method(full_method)?);
 
         let key: Arc<str> = Arc::from(full_method);
         let mut guard = self.methods.write().unwrap_or_else(|p| p.into_inner());
-        Ok(guard.entry(key).or_insert_with(|| m.clone()).clone())
+        Ok(guard.entry(key).or_insert_with(|| method.clone()).clone())
     }
 
-    pub(crate) async fn connect(
-        &self,
-        target: String,
-        opts: wrkr_core::GrpcConnectOptions,
-    ) -> Result<(), String> {
+    pub async fn connect(&self, target: String, opts: ConnectOptions) -> Result<()> {
         let spec = ConnectSpec {
             target: target.clone(),
             timeout: opts.timeout,
@@ -136,10 +140,7 @@ impl SharedGrpcClient {
             let mut guard = self.connect_spec.lock().unwrap_or_else(|p| p.into_inner());
             if let Some(existing) = guard.as_ref() {
                 if existing != &spec {
-                    return Err(
-                        "grpc client: connect() called multiple times with different arguments"
-                            .to_string(),
-                    );
+                    return Err(Error::ConnectSpecMismatch);
                 }
             } else {
                 *guard = Some(spec);
@@ -149,16 +150,16 @@ impl SharedGrpcClient {
         let pool_size = self.pool_size;
         self.client
             .get_or_try_init(|| async move {
-                let client =
-                    wrkr_core::GrpcClient::connect_pooled(&target, opts, pool_size).await?;
-                Ok::<Arc<wrkr_core::GrpcClient>, wrkr_core::GrpcError>(Arc::new(client))
+                let client = GrpcClient::connect_pooled(&target, opts, pool_size).await?;
+                Ok::<Arc<GrpcClient>, crate::Error>(Arc::new(client))
             })
             .await
             .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map_err(Error::Grpc)
     }
 
-    pub(crate) fn client(&self) -> Option<Arc<wrkr_core::GrpcClient>> {
+    #[must_use]
+    pub fn client(&self) -> Option<Arc<GrpcClient>> {
         self.client.get().cloned()
     }
 }
@@ -168,9 +169,13 @@ struct RegistryKey {
     pool_size: usize,
 }
 
-static SHARED: OnceLock<Mutex<HashMap<RegistryKey, Arc<SharedGrpcClient>>>> = OnceLock::new();
+#[derive(Debug, Default)]
+pub struct SharedGrpcRegistry {
+    inner: Mutex<HashMap<RegistryKey, Arc<SharedGrpcClient>>>,
+}
 
-pub(crate) fn default_pool_size(max_vus: u64) -> usize {
+#[must_use]
+pub fn default_pool_size(max_vus: u64) -> usize {
     let vus = max_vus as usize;
     // Aim for roughly 8 VUs per channel, but clamp the pool size between 16 and 64
     // connections so we keep a reasonable lower bound for low VU counts and never
@@ -178,15 +183,17 @@ pub(crate) fn default_pool_size(max_vus: u64) -> usize {
     (vus / 8).clamp(16, 64).max(1)
 }
 
-pub(crate) fn get_or_create(pool_size: usize) -> Arc<SharedGrpcClient> {
-    let key = RegistryKey {
-        pool_size: pool_size.max(1),
-    };
+impl SharedGrpcRegistry {
+    #[must_use]
+    pub fn get_or_create(&self, pool_size: usize) -> Arc<SharedGrpcClient> {
+        let key = RegistryKey {
+            pool_size: pool_size.max(1),
+        };
 
-    let map = SHARED.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = map.lock().unwrap_or_else(|p| p.into_inner());
-    guard
-        .entry(key)
-        .or_insert_with(|| Arc::new(SharedGrpcClient::new(key.pool_size)))
-        .clone()
+        let mut guard = self.inner.lock().unwrap_or_else(|p| p.into_inner());
+        guard
+            .entry(key)
+            .or_insert_with(|| Arc::new(SharedGrpcClient::new(key.pool_size)))
+            .clone()
+    }
 }

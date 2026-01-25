@@ -1,10 +1,8 @@
-use mlua::{Lua, Value};
-use std::path::Path;
-use std::sync::Arc;
-
 use crate::Result;
 use crate::loader::{chunk_name, configure_module_path};
 use crate::modules;
+use mlua::{Lua, Value};
+use std::sync::Arc;
 
 pub struct HandleSummaryOutputs {
     pub stdout: Option<String>,
@@ -12,47 +10,29 @@ pub struct HandleSummaryOutputs {
     pub files: Vec<(String, String)>,
 }
 
-fn init_lua(
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    client: Arc<wrkr_core::HttpClient>,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
-) -> Result<Lua> {
+fn init_lua(run_ctx: &wrkr_core::RunScenariosContext) -> Result<Lua> {
     let lua = Lua::new();
-    configure_module_path(&lua, script_path)?;
+    configure_module_path(&lua, &run_ctx.script_path)?;
     modules::register(
         &lua,
         modules::RegisterContext {
-            script_path,
-            env_vars,
             vu_id: 0,
             max_vus: 1,
-            client,
-            shared,
-            metrics,
+            metrics_ctx: wrkr_core::MetricsContext::new(
+                Arc::from("Default"),
+                Arc::<[(String, String)]>::from([]),
+            ),
+            run_ctx,
         },
     )?;
     Ok(lua)
 }
 
-pub fn run_setup(
-    script: &str,
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
-) -> Result<()> {
-    let lua = init_lua(
-        script_path,
-        env_vars,
-        Arc::new(wrkr_core::HttpClient::default()),
-        shared,
-        metrics,
-    )?;
+pub fn run_setup(run_ctx: &wrkr_core::RunScenariosContext) -> Result<()> {
+    let lua = init_lua(run_ctx)?;
 
-    let chunk_name = chunk_name(script_path);
-    lua.load(script).set_name(&chunk_name).exec()?;
+    let chunk_name = chunk_name(&run_ctx.script_path);
+    lua.load(&run_ctx.script).set_name(&chunk_name).exec()?;
 
     let globals = lua.globals();
     let setup: Option<mlua::Function> = globals.get("Setup").ok();
@@ -64,23 +44,11 @@ pub fn run_setup(
     Ok(())
 }
 
-pub fn run_teardown(
-    script: &str,
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
-) -> Result<()> {
-    let lua = init_lua(
-        script_path,
-        env_vars,
-        Arc::new(wrkr_core::HttpClient::default()),
-        shared,
-        metrics,
-    )?;
+pub fn run_teardown(run_ctx: &wrkr_core::RunScenariosContext) -> Result<()> {
+    let lua = init_lua(run_ctx)?;
 
-    let chunk_name = chunk_name(script_path);
-    lua.load(script).set_name(&chunk_name).exec()?;
+    let chunk_name = chunk_name(&run_ctx.script_path);
+    lua.load(&run_ctx.script).set_name(&chunk_name).exec()?;
 
     let globals = lua.globals();
     let teardown: Option<mlua::Function> = globals.get("Teardown").ok();
@@ -93,22 +61,12 @@ pub fn run_teardown(
 }
 
 pub fn run_handle_summary(
-    script: &str,
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
+    run_ctx: &wrkr_core::RunScenariosContext,
 ) -> Result<Option<HandleSummaryOutputs>> {
-    let lua = init_lua(
-        script_path,
-        env_vars,
-        Arc::new(wrkr_core::HttpClient::default()),
-        shared,
-        metrics,
-    )?;
+    let lua = init_lua(run_ctx)?;
 
-    let chunk_name = chunk_name(script_path);
-    lua.load(script).set_name(&chunk_name).exec()?;
+    let chunk_name = chunk_name(&run_ctx.script_path);
+    lua.load(&run_ctx.script).set_name(&chunk_name).exec()?;
 
     let globals = lua.globals();
     let handle_summary: Option<mlua::Function> = globals.get("HandleSummary").ok();

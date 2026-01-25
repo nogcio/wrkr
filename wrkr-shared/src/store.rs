@@ -5,8 +5,6 @@ use std::sync::Mutex;
 use tokio::sync::Barrier;
 use tokio::sync::watch;
 
-use super::SharedValue;
-
 #[derive(Debug, Default)]
 pub struct SharedStore {
     inner: Mutex<Inner>,
@@ -14,7 +12,7 @@ pub struct SharedStore {
 
 #[derive(Debug, Default)]
 struct Inner {
-    values: HashMap<String, Arc<SharedValue>>,
+    values: HashMap<String, Arc<wrkr_value::Value>>,
     notifies: HashMap<String, watch::Sender<u64>>,
     barriers: HashMap<String, BarrierEntry>,
 }
@@ -26,7 +24,7 @@ struct BarrierEntry {
 }
 
 impl SharedStore {
-    pub fn set(&self, key: &str, value: SharedValue) {
+    pub fn set(&self, key: &str, value: wrkr_value::Value) {
         let notify = {
             let mut inner = self
                 .inner
@@ -42,7 +40,7 @@ impl SharedStore {
         }
     }
 
-    pub fn get(&self, key: &str) -> Option<Arc<SharedValue>> {
+    pub fn get(&self, key: &str) -> Option<Arc<wrkr_value::Value>> {
         let inner = self
             .inner
             .lock()
@@ -69,7 +67,7 @@ impl SharedStore {
             let next = cur.saturating_add(delta);
             inner
                 .values
-                .insert(key.to_string(), Arc::new(SharedValue::I64(next)));
+                .insert(key.to_string(), Arc::new(wrkr_value::Value::I64(next)));
             inner.notifies.get(key).cloned()
         };
 
@@ -178,15 +176,15 @@ mod tests {
 
         assert!(store.get("missing").is_none());
 
-        store.set("a", SharedValue::Bool(true));
+        store.set("a", wrkr_value::Value::Bool(true));
         match store.get("a") {
-            Some(v) => assert_eq!(&*v, &SharedValue::Bool(true)),
+            Some(v) => assert_eq!(&*v, &wrkr_value::Value::Bool(true)),
             None => panic!("expected key a"),
         }
 
-        store.set("b", SharedValue::String(Arc::<str>::from("hello")));
+        store.set("b", wrkr_value::Value::String(Arc::<str>::from("hello")));
         match store.get("b") {
-            Some(v) => assert_eq!(&*v, &SharedValue::String(Arc::<str>::from("hello"))),
+            Some(v) => assert_eq!(&*v, &wrkr_value::Value::String(Arc::<str>::from("hello"))),
             None => panic!("expected key b"),
         }
 
@@ -204,7 +202,7 @@ mod tests {
         assert_eq!(store.get_counter("c"), 42);
 
         // Non-i64 values are treated as 0 when incrementing.
-        store.set("x", SharedValue::Bool(true));
+        store.set("x", wrkr_value::Value::Bool(true));
         assert_eq!(store.get_counter("x"), 0);
         assert_eq!(store.incr("x", 5), 5);
         assert_eq!(store.get_counter("x"), 5);
@@ -223,7 +221,7 @@ mod tests {
         };
 
         tokio::task::yield_now().await;
-        store.set("k", SharedValue::I64(123));
+        store.set("k", wrkr_value::Value::I64(123));
 
         let got = match timeout(std::time::Duration::from_secs(1), waiter).await {
             Ok(join) => match join {
@@ -235,7 +233,7 @@ mod tests {
             },
             Err(_) => panic!("wait_for_key timed out"),
         };
-        assert_eq!(&*got, &SharedValue::I64(123));
+        assert_eq!(&*got, &wrkr_value::Value::I64(123));
     }
 
     #[tokio::test]

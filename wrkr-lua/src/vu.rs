@@ -7,7 +7,7 @@ use crate::loader::{chunk_name, configure_module_path};
 use crate::modules;
 use crate::{Error, Result};
 
-pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
+pub async fn run_vu(ctx: wrkr_core::VuContext) -> Result<()> {
     let debugging = debugger::debugging_enabled();
 
     let init = (|| -> Result<(Lua, mlua::Function)> {
@@ -19,29 +19,25 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
             Lua::new()
         };
 
-        let script_path = ctx.script_path.as_deref().map(std::path::PathBuf::as_path);
-        configure_module_path(&lua, script_path)?;
+        configure_module_path(&lua, &ctx.run_ctx.script_path)?;
         modules::register(
             &lua,
             modules::RegisterContext {
-                script_path,
-                env_vars: &ctx.env,
                 vu_id: ctx.vu_id,
                 max_vus: ctx.max_vus,
-                client: ctx.client.clone(),
-                shared: ctx.shared.clone(),
-                metrics: ctx.metrics.clone(),
+                metrics_ctx: ctx.metrics_ctx.clone(),
+                run_ctx: ctx.run_ctx.as_ref(),
             },
         )?;
 
         debugger::maybe_start_debugger(&lua);
 
-        let chunk_name = chunk_name(script_path);
-        lua.load(ctx.script.as_ref()).set_name(&chunk_name).exec()?;
+        let chunk_name = chunk_name(&ctx.run_ctx.script_path);
+        lua.load(&ctx.run_ctx.script).set_name(&chunk_name).exec()?;
 
-        let exec_fn: mlua::Function = match lua.globals().get(ctx.exec.as_ref())? {
+        let exec_fn: mlua::Function = match lua.globals().get(ctx.exec.as_str())? {
             Value::Function(f) => f,
-            _ if ctx.exec.as_ref() == "Default" => return Err(Error::MissingDefault),
+            _ if ctx.exec.eq("Default") => return Err(Error::MissingDefault),
             _ => return Err(Error::MissingExec(ctx.exec.to_string())),
         };
 
@@ -111,7 +107,7 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
     }
 
     match &ctx.work {
-        wrkr_core::runner::VuWork::Constant { gate } => {
+        wrkr_core::VuWork::Constant { gate } => {
             while gate.next() {
                 let started = Instant::now();
                 let res = run_one(create_exec_coroutine.as_ref(), &exec_fn).await;
@@ -120,7 +116,7 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
                 res?;
             }
         }
-        wrkr_core::runner::VuWork::RampingVus { schedule } => loop {
+        wrkr_core::VuWork::RampingVus { schedule } => loop {
             let elapsed = started.elapsed();
             if schedule.is_done(elapsed) {
                 break;
@@ -139,7 +135,7 @@ pub async fn run_vu(ctx: wrkr_core::runner::VuContext) -> Result<()> {
             ctx.record_iteration(elapsed, res.is_ok());
             res?;
         },
-        wrkr_core::runner::VuWork::RampingArrivalRate {
+        wrkr_core::VuWork::RampingArrivalRate {
             schedule, pacer, ..
         } => {
             loop {

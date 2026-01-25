@@ -6,6 +6,7 @@ mod error;
 mod kind;
 mod metadata;
 mod proto;
+pub mod shared;
 mod types;
 mod wire;
 
@@ -13,6 +14,7 @@ pub use client::GrpcClient;
 pub use error::{Error, Result};
 pub use kind::GrpcTransportErrorKind;
 pub use proto::{Error as ProtoError, GrpcMethod, ProtoSchema};
+pub use shared::SharedGrpcRegistry;
 pub use types::{ConnectOptions, InvokeOptions, TlsConfig, UnaryResult};
 
 /// Encode a unary request body for `method` using the protobuf schema metadata and `wrkr_value`

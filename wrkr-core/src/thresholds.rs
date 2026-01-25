@@ -91,16 +91,6 @@ pub fn parse_threshold_expr(raw: &str) -> Result<ThresholdExpr, String> {
     Ok(ThresholdExpr { agg, op, value })
 }
 
-fn compare(left: f64, op: ThresholdOp, right: f64) -> bool {
-    match op {
-        ThresholdOp::Lt => left < right,
-        ThresholdOp::Lte => left <= right,
-        ThresholdOp::Gt => left > right,
-        ThresholdOp::Gte => left >= right,
-        ThresholdOp::Eq => left == right,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

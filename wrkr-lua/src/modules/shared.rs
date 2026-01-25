@@ -2,12 +2,17 @@ use std::sync::Arc;
 
 use mlua::{Lua, Value};
 
-use crate::value_util::{Int64Repr, lua_to_value, value_to_lua};
+mod opts;
+mod result;
+
+use opts::SharedSetLuaArgs;
+use result::shared_value_to_lua;
 
 pub(super) fn register_runtime(
     lua: &Lua,
-    shared: Arc<wrkr_core::runner::SharedStore>,
+    run_ctx: Arc<wrkr_core::RunScenariosContext>,
 ) -> crate::Result<()> {
+    let shared = run_ctx.shared.clone();
     let loader = {
         let shared = shared.clone();
         lua.create_function(move |lua, ()| {
@@ -16,19 +21,15 @@ pub(super) fn register_runtime(
             let get = {
                 let shared = shared.clone();
                 lua.create_function(move |lua, key: String| {
-                    let Some(value) = shared.get(&key) else {
-                        return Ok(Value::Nil);
-                    };
-                    value_to_lua(lua, &value, Int64Repr::Integer).map_err(mlua::Error::external)
+                    shared_value_to_lua(lua, shared.get(&key))
                 })?
             };
 
             let set = {
                 let shared = shared.clone();
                 lua.create_function(move |lua, (key, value): (String, Value)| {
-                    let value = lua_to_value(lua, value, Int64Repr::Integer)
-                        .map_err(mlua::Error::external)?;
-                    shared.set(&key, value);
+                    let args = SharedSetLuaArgs::parse(lua, key, value)?;
+                    shared.set(&args.key, args.value);
                     Ok(())
                 })?
             };
@@ -60,11 +61,7 @@ pub(super) fn register_runtime(
                     let shared = shared.clone();
                     async move {
                         shared.wait_for_key(&key).await;
-                        let Some(value) = shared.get(&key) else {
-                            return Ok(Value::Nil);
-                        };
-                        value_to_lua(&lua, &value, Int64Repr::Integer)
-                            .map_err(mlua::Error::external)
+                        shared_value_to_lua(&lua, shared.get(&key))
                     }
                 })?
             };

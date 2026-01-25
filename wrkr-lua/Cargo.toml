@@ -29,9 +29,16 @@ tokio = { version = "1", features = [
 ] }
 uuid = { version = "1", features = ["v4"] }
 url = "2"
-wrkr-core = { path = "../wrkr-core" }
+wrkr-core = { path = "../wrkr-core", default-features = false }
+wrkr-grpc = { path = "../wrkr-grpc", optional = true }
+wrkr-http = { path = "../wrkr-http", optional = true }
 wrkr-metrics = { path = "../wrkr-metrics" }
 wrkr-value = { path = "../wrkr-value" }
+
+[features]
+default = ["http", "grpc"]
+http = ["dep:wrkr-http", "wrkr-core/http"]
+grpc = ["dep:wrkr-grpc", "wrkr-core/grpc"]
 
 [dev-dependencies]
 wrkr-testserver = { path = "../wrkr-testserver" }

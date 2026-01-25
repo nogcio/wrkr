@@ -22,9 +22,18 @@ tokio = { version = "1", features = [
     "process",
 ] }
 mimalloc = "0.1.48"
-wrkr-core = { path = "../wrkr-core" }
-wrkr-lua = { path = "../wrkr-lua" }
-wrkr-metrics = { path = "../wrkr-metrics" }
+wrkr-core = { path = "../wrkr-core", default-features = false }
+wrkr-lua = { path = "../wrkr-lua", default-features = false, optional = true }
+
+[features]
+default = ["lua", "http", "grpc"]
+
+# Script runtimes
+lua = ["dep:wrkr-lua"]
+
+# Protocol modules
+http = ["wrkr-core/http", "wrkr-lua?/http"]
+grpc = ["wrkr-core/grpc", "wrkr-lua?/grpc"]
 
 [dev-dependencies]
 wrkr-testserver = { path = "../wrkr-testserver" }

@@ -24,10 +24,7 @@ local ClientModule = {}
 ---@field timeout string? e.g. "1s"
 ---@field metadata table<string, string|string[]>?
 ---@field tags table<string, string|number|boolean>?
----@field name string?
 ---@field int64 'integer'|'string'? How to represent int64 values in the response (default: 'integer').
----@field include_metadata boolean? If true, include response headers/trailers (can be expensive).
----@field discard_response boolean? If true, skip decoding/converting the response message.
 
 ---@class wrkr.grpc.UnaryResponse
 ---@field ok boolean
@@ -35,8 +32,6 @@ local ClientModule = {}
 ---@field message string?
 ---@field error string?
 ---@field error_kind string?
----@field headers table<string, string>?
----@field trailers table<string, string>?
 ---@field response table?
 
 ---@class wrkr.grpc.Client
@@ -65,7 +60,7 @@ end
 ---@param opts wrkr.grpc.InvokeOptions?
 ---@return wrkr.grpc.UnaryResponse
 function Client:invoke(full_method, req, opts)
-	return { ok = true, status = 0, response = {}, headers = {}, trailers = {} }
+	return { ok = true, status = 0, response = {} }
 end
 
 ---@param full_method string @"pkg.Service/Method"

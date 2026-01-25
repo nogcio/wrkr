@@ -9,16 +9,16 @@ use super::OutputFormatter;
 pub(crate) struct JsonOutput;
 
 impl OutputFormatter for JsonOutput {
-    fn print_header(&self, _script_path: &Path, _scenarios: &[wrkr_core::runner::ScenarioConfig]) {}
+    fn print_header(&self, _script_path: &Path, _scenarios: &[wrkr_core::ScenarioConfig]) {}
 
-    fn progress(&self) -> Option<wrkr_core::runner::ProgressFn> {
+    fn progress(&self) -> Option<wrkr_core::ProgressFn> {
         Some(Arc::new(move |u| {
             let line = build_progress_line(&u);
             emit_json_line(&line);
         }))
     }
 
-    fn print_summary(&self, _summary: &wrkr_core::runner::RunSummary) -> anyhow::Result<()> {
+    fn print_summary(&self, _summary: &wrkr_core::RunSummary) -> anyhow::Result<()> {
         Ok(())
     }
 }
@@ -54,7 +54,7 @@ pub(crate) struct JsonProgressLine {
     pub req_per_sec_stdev_pct: f64,
 }
 
-fn build_progress_line(u: &wrkr_core::runner::ProgressUpdate) -> JsonProgressLine {
+fn build_progress_line(u: &wrkr_core::ProgressUpdate) -> JsonProgressLine {
     let (current_vus, _max_vus, _dropped_iterations_total) = scenario_progress_vus(&u.progress);
 
     JsonProgressLine {
@@ -96,15 +96,15 @@ fn emit_json_line(line: &JsonProgressLine) {
 }
 
 fn scenario_progress_vus(
-    progress: &wrkr_core::runner::ScenarioProgress,
+    progress: &wrkr_core::ScenarioProgress,
 ) -> (u64, Option<u64>, Option<u64>) {
     match progress {
-        wrkr_core::runner::ScenarioProgress::ConstantVus { vus, .. } => (*vus, Some(*vus), None),
-        wrkr_core::runner::ScenarioProgress::RampingVus { stage, .. } => {
+        wrkr_core::ScenarioProgress::ConstantVus { vus, .. } => (*vus, Some(*vus), None),
+        wrkr_core::ScenarioProgress::RampingVus { stage, .. } => {
             let current = stage.as_ref().map(|s| s.current_target).unwrap_or(0);
             (current, None, None)
         }
-        wrkr_core::runner::ScenarioProgress::RampingArrivalRate {
+        wrkr_core::ScenarioProgress::RampingArrivalRate {
             active_vus,
             max_vus,
             dropped_iterations_total,

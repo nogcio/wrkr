@@ -34,13 +34,41 @@ pub enum MetricValue {
 #[derive(Debug, Clone)]
 pub struct HistogramSummary {
     pub p50: Option<f64>,
+    pub p75: Option<f64>,
     pub p90: Option<f64>,
     pub p95: Option<f64>,
     pub p99: Option<f64>,
     pub min: Option<f64>,
     pub max: Option<f64>,
     pub mean: Option<f64>,
+    pub stdev: Option<f64>,
     pub count: u64,
+}
+
+pub(crate) fn new_default_histogram() -> Histogram<u64> {
+    // Defaults compatible with typical latency ms.
+    match Histogram::<u64>::new_with_bounds(1, 60_000 * 60, 3) {
+        Ok(h) => h,
+        Err(err) => panic!("failed to create histogram: {err}"),
+    }
+}
+
+pub(crate) fn summarize_histogram(h: &Histogram<u64>) -> HistogramSummary {
+    let count = h.len();
+    let map_val = |v| v as f64;
+
+    HistogramSummary {
+        p50: (count > 0).then(|| map_val(h.value_at_quantile(0.50))),
+        p75: (count > 0).then(|| map_val(h.value_at_quantile(0.75))),
+        p90: (count > 0).then(|| map_val(h.value_at_quantile(0.90))),
+        p95: (count > 0).then(|| map_val(h.value_at_quantile(0.95))),
+        p99: (count > 0).then(|| map_val(h.value_at_quantile(0.99))),
+        min: (count > 0).then(|| map_val(h.min())),
+        max: (count > 0).then(|| map_val(h.max())),
+        mean: (count > 0).then(|| h.mean()),
+        stdev: (count > 0).then(|| h.stdev()),
+        count,
+    }
 }
 
 #[derive(Debug)]
@@ -67,12 +95,7 @@ impl MetricStorage {
                 hits: AtomicU64::new(0),
             })),
             MetricKind::Histogram => {
-                // defaults compatible with typical latency ms
-                let h = match Histogram::<u64>::new_with_bounds(1, 60_000 * 60, 3) {
-                    Ok(hist) => hist,
-                    Err(_) => panic!("Failed to create histogram"),
-                };
-                MetricStorage::Histogram(Arc::new(Mutex::new(h)))
+                MetricStorage::Histogram(Arc::new(Mutex::new(new_default_histogram())))
             }
         }
     }

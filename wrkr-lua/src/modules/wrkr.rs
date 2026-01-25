@@ -7,8 +7,13 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
         let t = lua.create_table()?;
 
         let require: mlua::Function = lua.globals().get("require")?;
+
+        #[cfg(feature = "http")]
         let http: Table = require.call("wrkr/http")?;
+
+        #[cfg(feature = "grpc")]
         let grpc: Table = require.call("wrkr/grpc")?;
+
         let check: mlua::Function = require.call("wrkr/check")?;
         let env: Table = require.call("wrkr/env")?;
         let fs: Table = require.call("wrkr/fs")?;
@@ -19,8 +24,12 @@ pub(super) fn register(lua: &Lua) -> Result<()> {
         let shared: Table = require.call("wrkr/shared")?;
         let vu: Table = require.call("wrkr/vu")?;
 
+        #[cfg(feature = "http")]
         t.set("http", http)?;
+
+        #[cfg(feature = "grpc")]
         t.set("grpc", grpc)?;
+
         t.set("check", check)?;
         t.set("env", env)?;
         t.set("fs", fs)?;

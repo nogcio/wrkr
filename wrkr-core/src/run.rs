@@ -1,4 +1,5 @@
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::OnceLock;
@@ -11,14 +12,20 @@ use super::config::{
 };
 use super::error::{Error, Result};
 use super::gate::IterationGate;
+use super::iteration_metrics::IterationMetricIds;
+use super::metrics_context::MetricsContext;
 use super::pacer::ArrivalPacer;
-use super::progress::{LiveMetrics, ProgressFn, ProgressUpdate, ScenarioProgress, StageProgress};
+use super::progress::{ProgressFn, ProgressUpdate, ScenarioProgress, StageProgress};
+use super::request_metrics::RequestMetricIds;
 use super::schedule::RampingU64Schedule;
-use super::shared::SharedStore;
 use super::vu::{EnvVars, StartSignal, VuContext, VuWork};
 use tokio::sync::Barrier;
 use tokio::time::MissedTickBehavior;
+#[cfg(feature = "grpc")]
+use wrkr_grpc::SharedGrpcRegistry;
+#[cfg(feature = "http")]
 use wrkr_http::HttpClient;
+use wrkr_shared::store::SharedStore;
 
 pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec<ScenarioConfig>> {
     let cli_overrides_set = cfg.vus.is_some() || cfg.iterations.is_some() || cfg.duration.is_some();
@@ -28,6 +35,7 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
         let mut out = Vec::with_capacity(opts.scenarios.len());
         for s in opts.scenarios {
             let exec = s.exec.unwrap_or_else(|| "Default".to_string());
+            let metrics_ctx = MetricsContext::new(Arc::<str>::from(s.name), Arc::from(s.tags));
             let executor_name = s.executor.as_deref().unwrap_or("constant-vus");
             let executor_kind: ScenarioExecutorKind =
                 executor_name.parse().map_err(|_| Error::InvalidExecutor)?;
@@ -49,8 +57,8 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                 let duration = cfg.duration.or(s.duration).or(opts.duration);
 
                 out.push(ScenarioConfig {
-                    name: s.name,
                     exec,
+                    metrics_ctx,
                     executor: ScenarioExecutor::ConstantVus { vus },
                     iterations,
                     duration,
@@ -73,8 +81,8 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                     let duration = cfg.duration.or(s.duration).or(opts.duration);
 
                     out.push(ScenarioConfig {
-                        name: s.name,
                         exec,
+                        metrics_ctx,
                         executor: ScenarioExecutor::ConstantVus { vus },
                         iterations,
                         duration,
@@ -104,8 +112,8 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                     }
 
                     out.push(ScenarioConfig {
-                        name: s.name,
                         exec,
+                        metrics_ctx,
                         executor: ScenarioExecutor::RampingVus {
                             start_vus,
                             stages: s.stages,
@@ -147,8 +155,8 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
                     }
 
                     out.push(ScenarioConfig {
-                        name: s.name,
                         exec,
+                        metrics_ctx,
                         executor: ScenarioExecutor::RampingArrivalRate {
                             start_rate,
                             time_unit,
@@ -185,28 +193,56 @@ pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec
     let duration = cfg.duration.or(opts.duration);
 
     Ok(vec![ScenarioConfig {
-        name: "Default".to_string(),
         exec: "Default".to_string(),
+        metrics_ctx: MetricsContext::new(Arc::from("Default"), Arc::<[(String, String)]>::from([])),
         executor: ScenarioExecutor::ConstantVus { vus },
         iterations,
         duration,
     }])
 }
 
-pub fn process_env_snapshot() -> EnvVars {
-    let vars: Vec<(Arc<str>, Arc<str>)> = std::env::vars()
-        .map(|(k, v)| (Arc::<str>::from(k), Arc::<str>::from(v)))
-        .collect();
-    Arc::from(vars.into_boxed_slice())
+#[derive(Debug, Clone)]
+pub struct RunScenariosContext {
+    pub env: EnvVars,
+    pub script: String,
+    pub script_path: PathBuf,
+    pub shared: Arc<SharedStore>,
+    pub metrics: Arc<wrkr_metrics::Registry>,
+    pub request_metrics: RequestMetricIds,
+    pub iteration_metrics: IterationMetricIds,
+    pub checks_metric: wrkr_metrics::MetricId,
+    #[cfg(feature = "grpc")]
+    pub grpc: Arc<SharedGrpcRegistry>,
+    #[cfg(feature = "http")]
+    pub client: Arc<HttpClient>,
+}
+
+impl RunScenariosContext {
+    pub fn new(env: EnvVars, script: String, script_path: PathBuf) -> Self {
+        let metrics = Arc::new(wrkr_metrics::Registry::default());
+        let request_metrics = RequestMetricIds::register(&metrics);
+        let iteration_metrics = IterationMetricIds::register(&metrics);
+        let checks_metric = metrics.register("checks", wrkr_metrics::MetricKind::Counter);
+        Self {
+            env,
+            script,
+            script_path,
+            shared: Arc::new(SharedStore::default()),
+            metrics,
+            request_metrics,
+            iteration_metrics,
+            checks_metric,
+            #[cfg(feature = "grpc")]
+            grpc: Arc::new(SharedGrpcRegistry::default()),
+            #[cfg(feature = "http")]
+            client: Arc::new(HttpClient::default()),
+        }
+    }
 }
 
 pub async fn run_scenarios<F, Fut, E>(
-    script: &str,
-    script_path: Option<&Path>,
     scenarios: Vec<ScenarioConfig>,
-    env: EnvVars,
-    shared: Arc<SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
+    ctx: RunScenariosContext,
     vu: F,
     progress: Option<ProgressFn>,
 ) -> Result<RunSummary>
@@ -215,10 +251,7 @@ where
     Fut: std::future::Future<Output = std::result::Result<(), E>> + Send + 'static,
     E: std::error::Error + Send + Sync + 'static,
 {
-    let client = Arc::new(HttpClient::default());
-
-    let script: Arc<str> = Arc::from(script);
-    let script_path = script_path.map(|p| Arc::new(p.to_path_buf()));
+    let run_ctx = Arc::new(ctx);
 
     let scenario_max_vus = |s: &ScenarioConfig| -> u64 {
         match &s.executor {
@@ -273,6 +306,7 @@ where
     }
 
     let mut progress_scenarios: Vec<ProgressScenario> = Vec::new();
+    let mut scenario_names: Vec<String> = Vec::new();
 
     let mut next_vu_id: u64 = 1;
 
@@ -281,8 +315,12 @@ where
     let mut handles = Vec::with_capacity(total_vus);
     for scenario in scenarios {
         let scenario_vus_max = scenario_max_vus(&scenario);
-        let scenario_name_string = scenario.name.clone();
+        let scenario_name_string = scenario.metrics_ctx.scenario().to_string();
         let exec_string = scenario.exec.clone();
+
+        if !scenario_names.iter().any(|s| s == &scenario_name_string) {
+            scenario_names.push(scenario_name_string.clone());
+        }
 
         let work = match &scenario.executor {
             ScenarioExecutor::ConstantVus { vus } => {
@@ -354,26 +392,17 @@ where
             }
         };
 
-        let scenario_name: Arc<str> = Arc::from(scenario.name);
-        let exec: Arc<str> = Arc::from(scenario.exec);
-
         for scenario_vu in 1..=scenario_vus_max {
             let vu_id = next_vu_id;
             next_vu_id = next_vu_id.saturating_add(1);
             let ctx = VuContext {
                 vu_id,
                 max_vus,
-                scenario: scenario_name.clone(),
+                metrics_ctx: scenario.metrics_ctx.clone(),
                 scenario_vu,
-                script: script.clone(),
-                script_path: script_path.clone(),
-                exec: exec.clone(),
-                client: client.clone(),
+                exec: scenario.exec.clone(),
                 work: work.clone(),
-                env: env.clone(),
-
-                metrics: metrics.clone(),
-                shared: shared.clone(),
+                run_ctx: run_ctx.clone(),
 
                 run_started: run_started.clone(),
 
@@ -421,12 +450,32 @@ where
     let progress_handle = progress.as_ref().map(|progress| {
         let progress = progress.clone();
         let scenarios = progress_scenarios.clone();
+        let metrics = run_ctx.metrics.clone();
+        let request_ids = run_ctx.request_metrics;
+        let iteration_ids = run_ctx.iteration_metrics;
+        let checks_metric = run_ctx.checks_metric;
         tokio::spawn(async move {
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
             let mut tick_id: u64 = 0;
             let mut last_at = Instant::now();
+
+            #[derive(Default)]
+            struct ScenarioLiveState {
+                prev: super::metrics_agg::ScenarioSnapshot,
+                has_prev: bool,
+                rps_stats: super::metrics_agg::RunningStats,
+            }
+
+            let computer = super::metrics_agg::MetricComputer::new(
+                &metrics,
+                request_ids,
+                iteration_ids,
+                checks_metric,
+            );
+            let mut state_by_scenario: HashMap<String, ScenarioLiveState> = HashMap::new();
+
             loop {
                 interval.tick().await;
 
@@ -434,10 +483,25 @@ where
                 let now = Instant::now();
                 let dt = now.duration_since(last_at);
                 last_at = now;
+                let dt_secs = dt.as_secs_f64();
 
                 let elapsed = started.elapsed();
 
                 for s in &scenarios {
+                    let st = state_by_scenario.entry(s.name.clone()).or_default();
+
+                    let prev = st.has_prev.then_some(st.prev);
+                    let (metrics_live, snapshot) = computer.compute_live_metrics(
+                        &metrics,
+                        s.name.as_str(),
+                        prev,
+                        dt_secs,
+                        &mut st.rps_stats,
+                    );
+
+                    st.prev = snapshot;
+                    st.has_prev = true;
+
                     let progress_val = match &s.progress {
                         ScenarioProgressInfo::ConstantVus { vus, duration } => {
                             ScenarioProgress::ConstantVus {
@@ -494,7 +558,7 @@ where
                         elapsed,
                         scenario: s.name.clone(),
                         exec: s.exec.clone(),
-                        metrics: LiveMetrics::default(),
+                        metrics: metrics_live,
                         progress: progress_val,
                     });
                 }
@@ -552,5 +616,11 @@ where
         let _ = h.await;
     }
 
-    Ok(RunSummary::default())
+    Ok(super::metrics_agg::build_run_summary(
+        &run_ctx.metrics,
+        run_ctx.request_metrics,
+        run_ctx.iteration_metrics,
+        run_ctx.checks_metric,
+        &scenario_names,
+    ))
 }

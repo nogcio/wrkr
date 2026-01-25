@@ -3,6 +3,7 @@ resolver = "3"
 members = [
     "wrkr",
     "wrkr-core",
+    "wrkr-shared",
     "wrkr-lua",
     "wrkr-metrics",
     "wrkr-testserver",

@@ -5,9 +5,9 @@ mod human;
 mod json;
 
 pub(crate) trait OutputFormatter: Send + Sync {
-    fn print_header(&self, script_path: &Path, scenarios: &[wrkr_core::runner::ScenarioConfig]);
-    fn progress(&self) -> Option<wrkr_core::runner::ProgressFn>;
-    fn print_summary(&self, summary: &wrkr_core::runner::RunSummary) -> anyhow::Result<()>;
+    fn print_header(&self, script_path: &Path, scenarios: &[wrkr_core::ScenarioConfig]);
+    fn progress(&self) -> Option<wrkr_core::ProgressFn>;
+    fn print_summary(&self, summary: &wrkr_core::RunSummary) -> anyhow::Result<()>;
 }
 
 pub(crate) fn formatter(format: OutputFormat) -> Box<dyn OutputFormatter> {

@@ -1,3 +1,4 @@
+pub mod agg;
 pub mod key;
 pub mod metrics;
 pub mod registry;

@@ -1,0 +1,23 @@
+[package]
+name = "wrkr-shared"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+homepage.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = "2"
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "sync",
+    "time",
+] }
+
+# cross-language data contract
+wrkr-value = { path = "../wrkr-value" }
+
+[lints]
+workspace = true

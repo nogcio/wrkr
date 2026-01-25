@@ -1,4 +1,4 @@
-pub use wrkr_core::runner::{RunConfig, ScenarioConfig, ScenarioOptions, ScriptOptions};
+pub use wrkr_core::{RunConfig, ScenarioConfig, ScenarioOptions, ScriptOptions};
 
 pub type Result<T> = std::result::Result<T, Error>;
 
@@ -43,28 +43,21 @@ pub enum Error {
     #[error("`options.scenarios[*].time_unit` must be a valid duration, e.g. 1s")]
     InvalidTimeUnit,
 
+    #[error("`options.scenarios[*].tags` must be a table of string -> scalar")]
+    InvalidScenarioTags,
+
     #[error("`options.thresholds` must be a table of metric -> [expr, ...]")]
     InvalidThresholds,
-
-    #[error("invalid http option `name` (expected string)")]
-    InvalidHttpName,
 
     #[error("invalid metric name (expected non-empty string)")]
     InvalidMetricName,
 
     #[error("invalid metric value")]
     InvalidMetricValue,
-
-    #[error("runner error: {0}")]
-    Runner(#[from] wrkr_core::runner::Error),
 }
 
 mod debugger;
 mod editor_stubs;
-mod group_api;
-mod grpc_api;
-mod grpc_shared;
-mod http_api;
 mod json_util;
 mod lifecycle;
 mod loader;

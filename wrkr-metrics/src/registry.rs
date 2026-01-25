@@ -3,9 +3,7 @@ use dashmap::DashMap;
 use parking_lot::RwLock;
 
 use crate::key::{Interner, KeyId};
-use crate::metrics::{
-    HistogramSummary, MetricHandle, MetricKind, MetricSeriesSummary, MetricStorage, MetricValue,
-};
+use crate::metrics::{MetricHandle, MetricKind, MetricSeriesSummary, MetricStorage, MetricValue};
 use crate::tags::TagSet;
 use std::sync::atomic::Ordering;
 
@@ -47,6 +45,14 @@ impl Registry {
         self.interner.get_or_intern(key)
     }
 
+    pub fn resolve_key_id(&self, id: KeyId) -> Option<std::sync::Arc<str>> {
+        self.interner.resolve(id)
+    }
+
+    pub fn query(&self, metric: MetricId) -> crate::agg::Query<'_> {
+        crate::agg::Query::new(self, metric)
+    }
+
     pub fn resolve_tags(&self, tags: &[(&str, &str)]) -> TagSet {
         let mut resolved: Vec<(KeyId, KeyId)> = tags
             .iter()
@@ -82,6 +88,62 @@ impl Registry {
             MetricStorage::Rate(a) => MetricHandle::Rate(a.clone()),
             MetricStorage::Histogram(a) => MetricHandle::Histogram(a.clone()),
         }
+    }
+
+    pub fn visit_series<F>(&self, metric: MetricId, mut visit: F)
+    where
+        F: FnMut(&TagSet, &MetricStorage),
+    {
+        let Some(series_map) = self.storage.get(&metric) else {
+            return;
+        };
+
+        for series in series_map.iter() {
+            visit(series.key(), series.value());
+        }
+    }
+
+    pub fn fold_counter_sum<P>(&self, metric: MetricId, mut predicate: P) -> u64
+    where
+        P: FnMut(&TagSet) -> bool,
+    {
+        let mut total = 0u64;
+        self.visit_series(metric, |tags, storage| {
+            if !predicate(tags) {
+                return;
+            }
+            if let MetricStorage::Counter(c) = storage {
+                total = total.saturating_add(c.load(Ordering::Relaxed));
+            }
+        });
+        total
+    }
+
+    pub fn fold_histogram_summary<P>(
+        &self,
+        metric: MetricId,
+        mut predicate: P,
+    ) -> Option<crate::metrics::HistogramSummary>
+    where
+        P: FnMut(&TagSet) -> bool,
+    {
+        let mut acc = crate::metrics::new_default_histogram();
+        let mut any = false;
+
+        self.visit_series(metric, |tags, storage| {
+            if !predicate(tags) {
+                return;
+            }
+            let MetricStorage::Histogram(h) = storage else {
+                return;
+            };
+
+            any = true;
+            let h = h.lock();
+            let _ = acc.add(&*h);
+        });
+
+        any.then(|| crate::metrics::summarize_histogram(&acc))
     }
 
     pub fn summarize(&self) -> Vec<MetricSeriesSummary> {
@@ -139,43 +201,7 @@ impl Registry {
                     }
                     MetricStorage::Histogram(h) => {
                         let h = h.lock();
-                        let count = h.len();
-                        let map_val = |v| v as f64;
-
-                        MetricValue::Histogram(HistogramSummary {
-                            p50: if count > 0 {
-                                Some(map_val(h.value_at_quantile(0.50)))
-                            } else {
-                                None
-                            },
-                            p90: if count > 0 {
-                                Some(map_val(h.value_at_quantile(0.90)))
-                            } else {
-                                None
-                            },
-                            p95: if count > 0 {
-                                Some(map_val(h.value_at_quantile(0.95)))
-                            } else {
-                                None
-                            },
-                            p99: if count > 0 {
-                                Some(map_val(h.value_at_quantile(0.99)))
-                            } else {
-                                None
-                            },
-                            min: if count > 0 {
-                                Some(map_val(h.min()))
-                            } else {
-                                None
-                            },
-                            max: if count > 0 {
-                                Some(map_val(h.max()))
-                            } else {
-                                None
-                            },
-                            mean: if count > 0 { Some(h.mean()) } else { None },
-                            count,
-                        })
+                        MetricValue::Histogram(crate::metrics::summarize_histogram(&h))
                     }
                 };
 
@@ -190,5 +216,76 @@ impl Registry {
 
         out.sort_by(|a, b| a.name.cmp(&b.name));
         out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metrics::MetricKind;
+
+    #[test]
+    fn fold_counter_sum_filters_by_tags() {
+        let reg = Registry::default();
+        let m = reg.register("requests_total", MetricKind::Counter);
+
+        let scenario_key = reg.resolve_key("scenario");
+        let a = reg.resolve_key("A");
+        let b = reg.resolve_key("B");
+
+        let tags_a = TagSet::from_sorted_iter([(scenario_key, a)]);
+        let tags_b = TagSet::from_sorted_iter([(scenario_key, b)]);
+
+        if let Some(MetricHandle::Counter(c)) = reg.get_handle(m, tags_a) {
+            c.fetch_add(10, Ordering::Relaxed);
+        }
+        if let Some(MetricHandle::Counter(c)) = reg.get_handle(m, tags_b) {
+            c.fetch_add(3, Ordering::Relaxed);
+        }
+
+        let sum_a = reg.fold_counter_sum(m, |tags| tags.get(scenario_key) == Some(a));
+        let sum_all = reg.fold_counter_sum(m, |_tags| true);
+
+        assert_eq!(sum_a, 10);
+        assert_eq!(sum_all, 13);
+    }
+
+    #[test]
+    fn fold_histogram_summary_merges_series() {
+        let reg = Registry::default();
+        let m = reg.register("request_latency_ms", MetricKind::Histogram);
+
+        let scenario_key = reg.resolve_key("scenario");
+        let a = reg.resolve_key("A");
+
+        let tags1 = TagSet::from_sorted_iter([
+            (scenario_key, a),
+            (reg.resolve_key("group"), reg.resolve_key("g1")),
+        ]);
+        let tags2 = TagSet::from_sorted_iter([
+            (scenario_key, a),
+            (reg.resolve_key("group"), reg.resolve_key("g2")),
+        ]);
+
+        if let Some(MetricHandle::Histogram(h)) = reg.get_handle(m, tags1) {
+            let mut h = h.lock();
+            let _ = h.record(10);
+            let _ = h.record(20);
+        }
+        if let Some(MetricHandle::Histogram(h)) = reg.get_handle(m, tags2) {
+            let mut h = h.lock();
+            let _ = h.record(30);
+        }
+
+        let summary = reg.fold_histogram_summary(m, |tags| tags.get(scenario_key) == Some(a));
+
+        let summary = match summary {
+            Some(s) => s,
+            None => panic!("expected histogram summary"),
+        };
+
+        assert_eq!(summary.count, 3);
+        assert_eq!(summary.max, Some(30.0));
+        assert_eq!(summary.min, Some(10.0));
     }
 }

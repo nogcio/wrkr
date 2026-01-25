@@ -16,14 +16,6 @@
   ],
   "tasks": [
     {
-      "label": "cargo: test (workspace)",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["test", "--workspace"],
-      "group": "test",
-      "problemMatcher": ["$rustc"]
-    },
-    {
       "label": "cargo: fmt (workspace)",
       "type": "shell",
       "command": "cargo",

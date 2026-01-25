@@ -1,5 +1,4 @@
 use mlua::{Lua, Table, Value};
-use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -8,30 +7,25 @@ use crate::modules;
 use crate::{Error, Result};
 
 pub fn parse_script_options(
-    script: &str,
-    script_path: Option<&Path>,
-    env_vars: &wrkr_core::runner::EnvVars,
-    client: Arc<wrkr_core::HttpClient>,
-    shared: Arc<wrkr_core::runner::SharedStore>,
-    metrics: Arc<wrkr_metrics::Registry>,
-) -> Result<wrkr_core::runner::ScriptOptions> {
+    run_ctx: &wrkr_core::RunScenariosContext,
+) -> Result<wrkr_core::ScriptOptions> {
     // Parse `options`/`options.scenarios` using a dedicated Lua state (no globals needed).
     let lua = Lua::new();
-    configure_module_path(&lua, script_path)?;
+    configure_module_path(&lua, &run_ctx.script_path)?;
     modules::register(
         &lua,
         modules::RegisterContext {
-            script_path,
-            env_vars,
             vu_id: 0,
             max_vus: 1,
-            client,
-            shared,
-            metrics,
+            metrics_ctx: wrkr_core::MetricsContext::new(
+                Arc::from("Default"),
+                Arc::<[(String, String)]>::from([]),
+            ),
+            run_ctx,
         },
     )?;
-    let chunk_name = chunk_name(script_path);
-    lua.load(script).set_name(&chunk_name).exec()?;
+    let chunk_name = chunk_name(&run_ctx.script_path);
+    lua.load(&run_ctx.script).set_name(&chunk_name).exec()?;
 
     let globals = lua.globals();
     let options: Option<Table> = globals.get("options").ok();
@@ -39,7 +33,7 @@ pub fn parse_script_options(
         .as_ref()
         .and_then(|t| t.get::<Table>("scenarios").ok());
 
-    let mut out = wrkr_core::runner::ScriptOptions::default();
+    let mut out = wrkr_core::ScriptOptions::default();
     if let Some(ref options) = options {
         out.vus = get_vus(options)?;
         out.iterations = get_iterations(options)?;
@@ -60,6 +54,7 @@ pub fn parse_script_options(
             };
 
             let exec = t.get::<String>("exec").ok();
+            let tags = get_scenario_tags(&t)?;
             let executor = get_string_any(&t, &["executor"])?;
             let vus = get_vus(&t)?;
             let iterations = get_iterations(&t)?;
@@ -74,9 +69,10 @@ pub fn parse_script_options(
 
             let stages = get_stages(&t)?;
 
-            out.scenarios.push(wrkr_core::runner::ScenarioOptions {
+            out.scenarios.push(wrkr_core::ScenarioOptions {
                 name,
                 exec,
+                tags,
                 executor,
                 vus,
                 iterations,
@@ -95,7 +91,7 @@ pub fn parse_script_options(
     Ok(out)
 }
 
-fn get_thresholds(t: &Table) -> Result<Vec<wrkr_core::runner::ThresholdSet>> {
+fn get_thresholds(t: &Table) -> Result<Vec<wrkr_core::ThresholdSet>> {
     let v = match t.get::<Value>("thresholds") {
         Ok(v) => v,
         Err(_) => return Ok(Vec::new()),
@@ -135,7 +131,7 @@ fn get_thresholds(t: &Table) -> Result<Vec<wrkr_core::runner::ThresholdSet>> {
             return Err(Error::InvalidThresholds);
         }
 
-        out.push(wrkr_core::runner::ThresholdSet {
+        out.push(wrkr_core::ThresholdSet {
             metric,
             expressions,
         });
@@ -204,6 +200,40 @@ fn get_string_any(t: &Table, keys: &[&str]) -> Result<Option<String>> {
     Ok(None)
 }
 
+fn get_scenario_tags(t: &Table) -> Result<Vec<(String, String)>> {
+    let v = match t.get::<Value>("tags") {
+        Ok(v) => v,
+        Err(_) => return Ok(Vec::new()),
+    };
+
+    let tbl = match v {
+        Value::Nil => return Ok(Vec::new()),
+        Value::Table(t) => t,
+        _ => return Err(Error::InvalidScenarioTags),
+    };
+
+    let mut out = Vec::new();
+    for pair in tbl.pairs::<Value, Value>() {
+        let (k, v) = pair?;
+        let k = match k {
+            Value::String(s) => s.to_string_lossy().to_string(),
+            _ => continue,
+        };
+
+        let v = match v {
+            Value::String(s) => s.to_string_lossy().to_string(),
+            Value::Integer(i) => i.to_string(),
+            Value::Number(n) if n.is_finite() => n.to_string(),
+            Value::Boolean(b) => b.to_string(),
+            _ => continue,
+        };
+
+        out.push((k, v));
+    }
+
+    Ok(out)
+}
+
 fn get_duration_any(t: &Table, keys: &[&str]) -> Result<Option<Duration>> {
     for key in keys {
         let v = match t.get::<Value>(*key) {
@@ -264,7 +294,7 @@ fn get_u64_any(t: &Table, keys: &[&str], allow_zero: bool) -> Result<Option<u64>
     Ok(None)
 }
 
-fn get_stages(t: &Table) -> Result<Vec<wrkr_core::runner::Stage>> {
+fn get_stages(t: &Table) -> Result<Vec<wrkr_core::Stage>> {
     let v = match t.get::<Value>("stages") {
         Ok(v) => v,
         Err(_) => return Ok(Vec::new()),
@@ -295,7 +325,7 @@ fn get_stages(t: &Table) -> Result<Vec<wrkr_core::runner::Stage>> {
             None => return Err(Error::InvalidStages),
         };
 
-        out.push(wrkr_core::runner::Stage { duration, target });
+        out.push(wrkr_core::Stage { duration, target });
     }
 
     Ok(out)
