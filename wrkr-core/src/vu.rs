@@ -1,4 +1,3 @@
-use crate::HttpClient;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -8,6 +7,7 @@ use std::time::Instant;
 use tokio::sync::Barrier;
 use tokio::sync::Notify;
 
+use wrkr_http::HttpClient;
 use wrkr_metrics::{MetricHandle, MetricKind};
 
 use super::gate::IterationGate;

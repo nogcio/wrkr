@@ -6,7 +6,29 @@ mod packed;
 mod primitives;
 mod scalar;
 
-use crate::proto::GrpcMethod;
+use crate::GrpcMethod;
+
+fn wire_type_for_kind(kind: &crate::proto::GrpcValueKind) -> primitives::WireType {
+    use crate::proto::GrpcValueKind as K;
+    use primitives::WireType;
+
+    match kind {
+        K::Bool
+        | K::Int32
+        | K::Sint32
+        | K::Int64
+        | K::Sint64
+        | K::Uint32
+        | K::Uint64
+        | K::Enum(_) => WireType::Varint,
+
+        K::Fixed32 | K::Sfixed32 | K::Float => WireType::ThirtyTwoBit,
+
+        K::Fixed64 | K::Sfixed64 | K::Double => WireType::SixtyFourBit,
+
+        K::String | K::Bytes | K::Message(_) => WireType::Len,
+    }
+}
 
 pub(crate) fn encode_value_for_method(
     method: &GrpcMethod,

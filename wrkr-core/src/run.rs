@@ -4,8 +4,7 @@ use std::sync::Mutex;
 use std::sync::OnceLock;
 use std::time::Instant;
 
-use crate::HttpClient;
-use crate::runner::RunSummary;
+use crate::RunSummary;
 
 use super::config::{
     RunConfig, ScenarioConfig, ScenarioExecutor, ScenarioExecutorKind, ScriptOptions,
@@ -19,6 +18,7 @@ use super::shared::SharedStore;
 use super::vu::{EnvVars, StartSignal, VuContext, VuWork};
 use tokio::sync::Barrier;
 use tokio::time::MissedTickBehavior;
+use wrkr_http::HttpClient;
 
 pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec<ScenarioConfig>> {
     let cli_overrides_set = cfg.vus.is_some() || cfg.iterations.is_some() || cfg.duration.is_some();

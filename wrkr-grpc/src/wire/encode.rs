@@ -1,13 +1,10 @@
-use crate::proto::GrpcFieldShape;
+use crate::proto::{GrpcFieldShape, GrpcInputFieldMeta};
 
 use super::map::encode_map_entry;
 use super::scalar::encode_scalar_field;
 
 pub(super) fn encode_message(
-    fields_by_name: &std::collections::HashMap<
-        std::sync::Arc<str>,
-        crate::proto::GrpcInputFieldMeta,
-    >,
+    fields_by_name: &std::collections::HashMap<std::sync::Arc<str>, GrpcInputFieldMeta>,
     value: &wrkr_value::Value,
     out: &mut bytes::BytesMut,
 ) -> std::result::Result<(), String> {

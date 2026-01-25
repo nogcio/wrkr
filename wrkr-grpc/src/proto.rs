@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -219,7 +219,7 @@ impl ProtoSchema {
         }
 
         // Deduplicate while preserving order (tiny input sizes).
-        let mut seen: std::collections::HashSet<PathBuf> = std::collections::HashSet::new();
+        let mut seen: HashSet<PathBuf> = HashSet::new();
         include_paths.retain(|p| seen.insert(p.clone()));
 
         let protoc = Self::resolve_protoc()?;
@@ -278,7 +278,7 @@ impl ProtoSchema {
         fn build_kind(
             kind: prost_reflect::Kind,
             message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
-            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+            message_in_progress: &mut HashSet<Arc<str>>,
         ) -> Result<GrpcValueKind> {
             Ok(match kind {
                 prost_reflect::Kind::Bool => GrpcValueKind::Bool,
@@ -313,7 +313,7 @@ impl ProtoSchema {
         fn build_message_meta(
             msg_desc: prost_reflect::MessageDescriptor,
             message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
-            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+            message_in_progress: &mut HashSet<Arc<str>>,
         ) -> Result<Arc<GrpcMessageMeta>> {
             let key = Arc::<str>::from(msg_desc.full_name());
             if let Some(existing) = message_cache.get(&key) {
@@ -332,6 +332,7 @@ impl ProtoSchema {
                 HashMap::with_capacity(msg_desc.fields().len());
             let mut fields_by_number: HashMap<u32, (Arc<str>, GrpcFieldShape)> =
                 HashMap::with_capacity(msg_desc.fields().len());
+
             for f in msg_desc.fields() {
                 let name = Arc::<str>::from(f.name());
                 let shape = build_shape(&f, message_cache, message_in_progress)?;
@@ -356,7 +357,7 @@ impl ProtoSchema {
         fn build_shape(
             field: &prost_reflect::FieldDescriptor,
             message_cache: &mut HashMap<Arc<str>, Arc<GrpcMessageMeta>>,
-            message_in_progress: &mut std::collections::HashSet<Arc<str>>,
+            message_in_progress: &mut HashSet<Arc<str>>,
         ) -> Result<GrpcFieldShape> {
             if field.is_map() {
                 let prost_reflect::Kind::Message(entry_desc) = field.kind() else {
@@ -394,8 +395,8 @@ impl ProtoSchema {
 
         let input = method.input();
         let mut message_cache: HashMap<Arc<str>, Arc<GrpcMessageMeta>> = HashMap::new();
-        let mut message_in_progress: std::collections::HashSet<Arc<str>> =
-            std::collections::HashSet::new();
+        let mut message_in_progress: HashSet<Arc<str>> = HashSet::new();
+
         let mut input_fields: HashMap<Arc<str>, GrpcInputFieldMeta> =
             HashMap::with_capacity(input.fields().len());
         for f in input.fields() {
@@ -431,10 +432,10 @@ impl ProtoSchema {
         }
 
         Ok(GrpcMethod {
+            path,
             input_fields,
             output_fields,
             output_field_index_by_number,
-            path,
         })
     }
 }

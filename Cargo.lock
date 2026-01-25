@@ -2156,10 +2156,21 @@ dependencies = [
  "bytes",
  "dashmap",
  "hdrhistogram",
- "http",
- "http-body-util",
- "hyper",
- "hyper-util",
+ "strum",
+ "thiserror",
+ "tokio",
+ "url",
+ "wrkr-grpc",
+ "wrkr-http",
+ "wrkr-metrics",
+ "wrkr-value",
+]
+
+[[package]]
+name = "wrkr-grpc"
+version = "0.0.6"
+dependencies = [
+ "bytes",
  "prost",
  "prost-reflect",
  "prost-types",
@@ -2168,9 +2179,22 @@ dependencies = [
  "thiserror",
  "tokio",
  "tonic",
- "url",
- "wrkr-metrics",
  "wrkr-value",
+]
+
+[[package]]
+name = "wrkr-http"
+version = "0.0.6"
+dependencies = [
+ "bytes",
+ "http",
+ "http-body-util",
+ "hyper",
+ "hyper-util",
+ "strum",
+ "thiserror",
+ "tokio",
+ "url",
 ]
 
 [[package]]

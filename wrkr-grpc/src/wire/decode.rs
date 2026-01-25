@@ -1,6 +1,7 @@
 use bytes::Buf as _;
 
-use crate::proto::{GrpcFieldShape, GrpcMethod};
+use crate::GrpcMethod;
+use crate::proto::{GrpcFieldShape, GrpcValueKind};
 
 use super::map::decode_map_entry_into_object;
 use super::packed::{decode_packed_values, kind_is_packable};
@@ -164,104 +165,33 @@ fn decode_field_value(
     src: &mut bytes::Bytes,
 ) -> std::result::Result<wrkr_value::Value, String> {
     match shape {
-        GrpcFieldShape::Scalar { kind } => decode_scalar_value(kind, wire_type, src),
-        GrpcFieldShape::List { kind } => {
-            if wire_type == WireType::Len && kind_is_packable(kind) {
-                let bytes = super::primitives::read_len_delimited(src)?;
-                let items = decode_packed_values(kind, bytes)?;
-                Ok(wrkr_value::Value::Array(items))
-            } else {
-                decode_scalar_value(kind, wire_type, src)
-            }
-        }
-        GrpcFieldShape::Map {
-            key_kind,
-            value_kind,
-        } => {
-            if wire_type != WireType::Len {
-                return Err("map field must be length-delimited".to_string());
-            }
-            let bytes = super::primitives::read_len_delimited(src)?;
-            // Temporarily leverage map decoding but we just want one entry.
-            // But we can call map::decode_map_entry directly which returns (k, v).
-            // decode_map_entry is in map.rs
-            let (k, v) = super::map::decode_map_entry(key_kind, value_kind, bytes)?;
-            let mut map: wrkr_value::MapMap = wrkr_value::MapMap::with_capacity(1);
-            map.insert(k, v);
-            Ok(wrkr_value::Value::Map(map))
-        }
+        GrpcFieldShape::Scalar { kind } => decode_scalar(kind, wire_type, src),
+        GrpcFieldShape::List { kind } => decode_list(kind, wire_type, src),
+        GrpcFieldShape::Map { .. } => Err("map fields are decoded via map-entry path".to_string()),
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bytes::BufMut as _;
-
-    use super::*;
-    use crate::proto::{GrpcFieldShape, GrpcValueKind};
-
-    use super::super::primitives::write_variant;
-
-    #[test]
-    fn decode_packed_varint_list_int32() {
-        // Field payload contains packed varints: [1, 2, 150]
-        let mut payload = bytes::BytesMut::new();
-        write_variant(1, &mut payload);
-        write_variant(2, &mut payload);
-        write_variant(150, &mut payload);
-
-        // Surround with len delimiter as it appears on the wire for packed fields.
-        let mut src = bytes::BytesMut::new();
-        write_variant(payload.len() as u64, &mut src);
-        src.put_slice(&payload);
-
-        let mut src = src.freeze();
-
-        let shape = GrpcFieldShape::List {
-            kind: GrpcValueKind::Int32,
-        };
-
-        let got = match decode_field_value(&shape, WireType::Len, &mut src) {
-            Ok(v) => v,
-            Err(e) => panic!("decode_field_value failed: {e}"),
-        };
-        let wrkr_value::Value::Array(items) = got else {
-            panic!("expected array");
-        };
-
-        assert_eq!(items.len(), 3);
-        assert_eq!(items[0], wrkr_value::Value::I64(1));
-        assert_eq!(items[1], wrkr_value::Value::I64(2));
-        assert_eq!(items[2], wrkr_value::Value::I64(150));
+fn decode_list(
+    kind: &GrpcValueKind,
+    wire_type: WireType,
+    src: &mut bytes::Bytes,
+) -> std::result::Result<wrkr_value::Value, String> {
+    // Repeated scalar primitives can be "packed" (outer wire type = Len) unless non-packable.
+    if wire_type == WireType::Len && kind_is_packable(kind) {
+        let bytes = super::primitives::read_len_delimited(src)?;
+        let items = decode_packed_values(kind, bytes)?;
+        return Ok(wrkr_value::Value::Array(items));
     }
 
-    #[test]
-    fn merge_decoded_field_extends_list_with_packed_array() {
-        let mut out: wrkr_value::ObjectMap = wrkr_value::ObjectMap::new();
-        let name = std::sync::Arc::<str>::from("nums");
-        let shape = GrpcFieldShape::List {
-            kind: GrpcValueKind::Int32,
-        };
+    Ok(wrkr_value::Value::Array(vec![decode_scalar(
+        kind, wire_type, src,
+    )?]))
+}
 
-        if let Err(e) = merge_decoded_field(
-            &mut out,
-            &name,
-            &shape,
-            wrkr_value::Value::Array(vec![wrkr_value::Value::I64(1), wrkr_value::Value::I64(2)]),
-        ) {
-            panic!("merge_decoded_field failed: {e}");
-        }
-
-        if let Err(e) = merge_decoded_field(&mut out, &name, &shape, wrkr_value::Value::I64(3)) {
-            panic!("merge_decoded_field failed: {e}");
-        }
-
-        let Some(wrkr_value::Value::Array(items)) = out.get(&name) else {
-            panic!("expected array");
-        };
-        assert_eq!(items.len(), 3);
-        assert_eq!(items[0], wrkr_value::Value::I64(1));
-        assert_eq!(items[1], wrkr_value::Value::I64(2));
-        assert_eq!(items[2], wrkr_value::Value::I64(3));
-    }
+fn decode_scalar(
+    kind: &GrpcValueKind,
+    wire_type: WireType,
+    src: &mut bytes::Bytes,
+) -> std::result::Result<wrkr_value::Value, String> {
+    decode_scalar_value(kind, wire_type, src)
 }

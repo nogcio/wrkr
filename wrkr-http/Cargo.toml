@@ -1,5 +1,5 @@
 [package]
-name = "wrkr-core"
+name = "wrkr-http"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
@@ -9,12 +9,10 @@ repository.workspace = true
 
 [dependencies]
 bytes = "1"
-ahash = "0.8"
-hdrhistogram = "7"
-wrkr-grpc = { path = "../wrkr-grpc" }
-wrkr-http = { path = "../wrkr-http" }
-wrkr-value = { path = "../wrkr-value" }
-wrkr-metrics = { path = "../wrkr-metrics" }
+http = "1"
+http-body-util = "0.1"
+hyper = { version = "1", features = ["client", "http1"] }
+hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 strum = { workspace = true }
 thiserror = "2"
 tokio = { version = "1", features = [
@@ -24,7 +22,6 @@ tokio = { version = "1", features = [
     "time",
 ] }
 url = "2"
-dashmap = "6.1.0"
 
 [lints]
 workspace = true

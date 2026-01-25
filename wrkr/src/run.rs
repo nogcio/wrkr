@@ -15,7 +15,7 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
     let cfg = run_config(&args);
     let script_path = Some(args.script.as_path());
 
-    let (summary, threshold_violations) = match script_extension(&args.script) {
+    let summary = match script_extension(&args.script) {
         "lua" => run_lua_script(&args, &script, script_path, &env, cfg, out.as_ref()).await?,
         ext => anyhow::bail!(
             "unsupported script extension `{ext}` (expected .lua): {}",
@@ -52,20 +52,24 @@ async fn run_lua_script(
     env: &wrkr_core::runner::EnvVars,
     cfg: wrkr_core::runner::RunConfig,
     out: &dyn output::OutputFormatter,
-) -> anyhow::Result<(
-    wrkr_core::runner::RunSummary,
-    Vec<wrkr_core::runner::ThresholdViolation>,
-)> {
+) -> anyhow::Result<wrkr_core::runner::RunSummary> {
     let shared = Arc::new(wrkr_core::runner::SharedStore::default());
     let metrics = Arc::new(wrkr_metrics::Registry::default());
 
     let options_client = Arc::new(wrkr_core::HttpClient::default());
 
-    let opts =
-        wrkr_lua::parse_script_options(script, script_path, env, options_client, shared.clone(), metrics.clone())
-            .context("failed to parse lua options")?;
+    let opts = wrkr_lua::parse_script_options(
+        script,
+        script_path,
+        env,
+        options_client,
+        shared.clone(),
+        metrics.clone(),
+    )
+    .context("failed to parse lua options")?;
 
-    wrkr_lua::run_setup(script, script_path, env, shared.clone(), metrics.clone()).context("lua Setup failed")?;
+    wrkr_lua::run_setup(script, script_path, env, shared.clone(), metrics.clone())
+        .context("lua Setup failed")?;
 
     let scenarios =
         wrkr_core::runner::scenarios_from_options(opts, cfg).context("invalid scenario config")?;
@@ -90,10 +94,17 @@ async fn run_lua_script(
     wrkr_lua::run_teardown(script, script_path, env, shared.clone(), metrics.clone())
         .context("lua Teardown failed")?;
 
-    run_lua_handle_summary(args.output, script, script_path, env, shared.clone(), metrics.clone())
-        .context("lua HandleSummary failed")?;
+    run_lua_handle_summary(
+        args.output,
+        script,
+        script_path,
+        env,
+        shared.clone(),
+        metrics.clone(),
+    )
+    .context("lua HandleSummary failed")?;
 
-    Ok((summary, vec![]))
+    Ok(summary)
 }
 
 fn run_lua_handle_summary(
