@@ -1,0 +1,84 @@
+[project]
+name = "wrkr-tools"
+version = "0.1.0"
+description = "Repo-level Python tooling for wrkr (uv-managed)."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [{ name = "wrkr contributors" }]
+# No runtime deps by default; this is primarily a tooling container.
+dependencies = []
+
+[project.optional-dependencies]
+# Tooling dependencies (lint/test) for Python-based tools in this repo.
+dev = ["ruff>=0.5", "pytest>=8.0"]
+
+# Convenience extra to install all repo Python tool runtime deps.
+# Add new tool deps here as more tools are introduced.
+tools = ["typer>=0.12", "rich>=13.7"]
+
+# Dependencies for the perf comparison tool (Python rewrite).
+compare-perf = ["typer>=0.12", "rich>=13.7"]
+
+# Dependencies for the profiling helper tool (Python rewrite).
+profile = ["typer>=0.12"]
+
+[project.scripts]
+# Python rewrite of wrkr-tools-compare-perf.
+# The implementation lives under `wrkr/tools/compare-perf/src/`.
+wrkr-tools-compare-perf = "wrkr_tools_compare_perf.__main__:main"
+
+# CPU profiling helper. Implementation: `tools/profile/src/`.
+wrkr-tools-profile = "wrkr_tools_profile.__main__:main"
+
+[build-system]
+requires = ["hatchling>=1.24"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+# Include the tool package directly from its tool folder.
+# This keeps all Python tooling centralized under this root-level pyproject,
+# while still letting each tool keep its own `src/` layout under `tools/`.
+packages = [
+  "tools/lib/wrkr_tools_common",
+  "tools/compare-perf/src/wrkr_tools_compare_perf",
+  "tools/profile/src/wrkr_tools_profile",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+  "E",
+  "F",
+  "W",   # pycodestyle/pyflakes
+  "I",   # isort
+  "UP",  # pyupgrade
+  "B",   # flake8-bugbear
+  "SIM", # flake8-simplify
+  "RUF", # ruff-specific
+]
+ignore = [
+  "E501", # formatter handles line length
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "wrkr_tools_common",
+  "wrkr_tools_compare_perf",
+  "wrkr_tools_profile",
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pytest.ini_options]
+testpaths = [
+  "tools/compare-perf/tests",
+  "tools/profile/tests",
+  "tools/lib/tests",
+]
+addopts = "-q"

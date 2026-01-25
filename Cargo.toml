@@ -5,7 +5,6 @@ members = [
     "wrkr-core",
     "wrkr-lua",
     "wrkr-testserver",
-    "wrkr-tools-compare-perf",
     "wrkr-value",
 ]
 

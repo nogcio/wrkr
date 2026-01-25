@@ -37,7 +37,15 @@ function Default()
 
   local res = http.post(echo_url, body, request_opts)
 
-  local decoded = json.decode(res.body)
+  local decode_ok = false
+  local decoded = nil
+  if type(res.body) == "string" and res.body ~= "" then
+    local ok, v = pcall(json.decode, res.body)
+    decode_ok = ok
+    if ok then
+      decoded = v
+    end
+  end
 
   check(res, {
     ["status is 200"] = function(r)
@@ -50,6 +58,9 @@ function Default()
     ["encoded matches stable"] = function(_r)
       -- sanity: encoding is deterministic for this payload
       return body == expected_json
+    end,
+    ["response json parses"] = function(_r)
+      return decode_ok
     end,
     ["decoded.arr[3] == 3"] = function(_r)
       return type(decoded) == "table" and type(decoded.arr) == "table" and decoded.arr[3] == 3

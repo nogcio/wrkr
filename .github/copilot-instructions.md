@@ -58,10 +58,6 @@
 
 - **Validation workflow**: before handing off a change, run formatting, linting, and tests to ensure correctness: `cargo fmt --all`, `cargo clippy --all-targets -- -D warnings`, and `cargo test --workspace` (or the narrowest applicable subset).
 
-- **Perf regression checks**: use the cross-platform perf harness `wrkr-tools-compare-perf` (Rust CLI). The legacy bash script `tools/perf/compare_wrk.sh` is removed.
-	- Typical run: `cargo run -p wrkr-tools-compare-perf --release -- --build`
-	- Fast sanity: `cargo run -p wrkr-tools-compare-perf --release -- --build --duration 2s`
-	- Requires `wrk` and `k6` installed (and `wrkr-testserver` is started automatically).
 - **Dependency changes require advisory scan**: if you add/update/remove dependencies (i.e. change `Cargo.toml` and/or `Cargo.lock`), you MUST also run `cargo deny check advisories` (or `make advisories`) and address any new RustSec advisories.
 
 - **Rust 2024 + clippy is the contract**: treat `cargo clippy --all-targets -- -D warnings` as a hard requirement. If clippy would warn, consider the change broken.

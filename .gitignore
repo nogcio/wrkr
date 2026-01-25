@@ -9,3 +9,12 @@
 
 # macOS
 .DS_Store
+
+# Python tooling
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.venv/
+*.egg-info/

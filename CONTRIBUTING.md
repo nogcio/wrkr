@@ -16,12 +16,27 @@ Thanks for contributing to `wrkr`!
 Prerequisites:
 
 - Rust toolchain (see `rust-toolchain.toml`)
+- Python package manager (`uv`):
+  - macOS (Homebrew): `brew install uv`
+  - Linux: install from https://docs.astral.sh/uv/getting-started/
 - LuaJIT (system):
   - Linux (Debian/Ubuntu): `libluajit-5.1-dev` (and `pkg-config`)
   - macOS (Homebrew): `brew install luajit pkg-config`
 - Protobuf compiler (`protoc`):
   - Linux (Debian/Ubuntu): `sudo apt-get install -y protobuf-compiler`
   - macOS (Homebrew): `brew install protobuf`
+
+Or run `make deps` to install all system dependencies (macOS/Linux):
+
+```bash
+make deps
+```
+
+Setup Python environment (one-time):
+
+```bash
+make py-sync
+```
 
 Common commands:
 

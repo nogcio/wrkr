@@ -1,0 +1,5 @@
+Running 5s test @ http://127.0.0.1:12345
+  8 threads and 256 connections
+Non-2xx or 3xx responses: 2
+Socket errors: connect 0, read 12, write 0, timeout 0
+Requests/sec: 1000.00
