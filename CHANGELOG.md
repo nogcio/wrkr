@@ -13,6 +13,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.8] - 2026-01-27
+
+### Added
+- Output: publish the NDJSON v1 JSON output contract (docs + JSON Schemas under `schemas/`).
+- Output: include thresholds results in the NDJSON v1 summary line (`thresholds.violations`).
+- Thresholds: support tag selectors in metric keys (e.g. `http_req_duration{group=login,method=GET}`) and document the selector rules.
+- Lua HTTP: add verb helpers (`put`, `patch`, `delete`, `head`, `options`) and tests.
+- Examples: add a thresholds grouping example (`examples/thresholds_group.lua`).
+
+### Changed
+- Fix #19: compute summary metrics and evaluate thresholds in `wrkr-core`, including tag-selector matching over metric series.
+- Output/Tools: refine JSON (NDJSON) output and update the perf harness parser accordingly.
+- Fix #20: standardize `wrkr run` failure classification via stable exit codes (checks/thresholds/script/invalid input/runtime).
+- Lua HTTP: always record the HTTP method as a stable request metric tag (`method`), overriding any user-supplied `method` tag.
+
+### Fixed
+- Lua checks: ensure `wrkr/check` accepts any value (regression test).
+
 ## [0.0.7] - 2026-01-26
 
 ### Added
