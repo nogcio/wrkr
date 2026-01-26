@@ -3,11 +3,6 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
-  "runArgs": [
-    "--cap-add=SYS_PTRACE",
-    "--cap-add=SYS_ADMIN",
-    "--security-opt=seccomp=unconfined"
-  ],
   "remoteUser": "vscode",
   "postCreateCommand": "bash .devcontainer/postCreate.sh",
   "forwardPorts": [12345, 50051],
