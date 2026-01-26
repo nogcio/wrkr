@@ -106,10 +106,13 @@ fn get_thresholds(t: &Table) -> Result<Vec<wrkr_core::ThresholdSet>> {
     let mut out = Vec::new();
     for pair in tbl.pairs::<Value, Value>() {
         let (k, v) = pair?;
-        let metric = match k {
+        let metric_key = match k {
             Value::String(s) => s.to_string_lossy().to_string(),
             _ => continue,
         };
+
+        let (metric, tags) = wrkr_core::parse_threshold_metric_key(&metric_key)
+            .map_err(|_| Error::InvalidThresholds)?;
 
         let expressions: Vec<String> = match v {
             Value::String(s) => vec![s.to_string_lossy().to_string()],
@@ -133,6 +136,7 @@ fn get_thresholds(t: &Table) -> Result<Vec<wrkr_core::ThresholdSet>> {
 
         out.push(wrkr_core::ThresholdSet {
             metric,
+            tags,
             expressions,
         });
     }

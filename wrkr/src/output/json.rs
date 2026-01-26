@@ -33,12 +33,8 @@ impl OutputFormatter for JsonOutput {
         }))
     }
 
-    fn print_summary(
-        &self,
-        summary: &wrkr_core::RunSummary,
-        metrics: Option<&[wrkr_core::MetricSeriesSummary]>,
-    ) -> anyhow::Result<()> {
-        let line = build_summary_line(summary, metrics, self.scenarios.get().map(Vec::as_slice));
+    fn print_summary(&self, summary: &wrkr_core::RunSummary) -> anyhow::Result<()> {
+        let line = build_summary_line(summary, self.scenarios.get().map(Vec::as_slice));
         emit_json_line(&line);
         Ok(())
     }
@@ -172,6 +168,22 @@ pub(crate) struct JsonSummaryLine {
     pub kind: &'static str,
     pub scenarios: Vec<JsonScenarioSummary>,
     pub totals: JsonTotals,
+    pub thresholds: JsonThresholdsSummary,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct JsonThresholdsSummary {
+    pub violations: Vec<JsonThresholdViolation>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct JsonThresholdViolation {
+    pub metric: String,
+    pub tags: BTreeMap<String, String>,
+    pub expression: String,
+    pub observed: Option<f64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -263,14 +275,11 @@ pub(crate) struct JsonTotals {
 
 fn build_summary_line(
     summary: &wrkr_core::RunSummary,
-    metrics: Option<&[wrkr_core::MetricSeriesSummary]>,
     scenarios: Option<&[wrkr_core::ScenarioConfig]>,
 ) -> JsonSummaryLine {
     let mut totals = JsonTotals::default();
 
-    let checks_by_scenario = metrics
-        .map(parse_checks_from_metric_series)
-        .unwrap_or_default();
+    let checks_by_scenario = parse_checks_from_metric_series(&summary.metrics);
 
     let scenarios = summary
         .scenarios
@@ -332,11 +341,25 @@ fn build_summary_line(
         })
         .collect::<Vec<_>>();
 
+    let thresholds = JsonThresholdsSummary {
+        violations: summary
+            .threshold_violations
+            .iter()
+            .map(|v| JsonThresholdViolation {
+                metric: v.metric.clone(),
+                tags: v.tags.iter().cloned().collect::<BTreeMap<_, _>>(),
+                expression: v.expression.clone(),
+                observed: v.observed,
+            })
+            .collect(),
+    };
+
     JsonSummaryLine {
         schema: NDJSON_SCHEMA,
         kind: "summary",
         scenarios,
         totals,
+        thresholds,
     }
 }
 
@@ -644,9 +667,10 @@ mod tests {
                 checks_failed: [("c1".to_string(), 6)].into_iter().collect(),
                 latency: None,
             }],
+            ..Default::default()
         };
 
-        let line = build_summary_line(&summary, None, None);
+        let line = build_summary_line(&summary, None);
         let v: Value = match serde_json::to_value(&line) {
             Ok(v) => v,
             Err(err) => panic!("to_value failed: {err}"),
@@ -666,6 +690,10 @@ mod tests {
         assert_eq!(
             v.pointer("/scenarios/0/scenario").and_then(Value::as_str),
             Some("s1")
+        );
+        assert!(
+            v.get("thresholds").is_some(),
+            "expected summary json to include `thresholds`"
         );
     }
 }

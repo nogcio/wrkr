@@ -20,11 +20,13 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     };
 
     let runtime = runtime::create_runtime(&args.script).map_err(classify_runtime_create_error)?;
-    let run_ctx = runtime.create_run_context(&env);
+    let mut run_ctx = runtime.create_run_context(&env);
 
     let opts = runtime
         .parse_script_options(&run_ctx)
         .map_err(|e| classify_runtime_error("failed to parse script options", e))?;
+
+    run_ctx.thresholds = Arc::from(opts.thresholds.clone().into_boxed_slice());
 
     runtime
         .run_setup(&run_ctx)
@@ -45,7 +47,12 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         progress,
     )
     .await
-    .map_err(|e| RunError::ScriptError(anyhow::Error::new(e).context("script run failed")))?;
+    .map_err(|e| match e {
+        wrkr_core::Error::ThresholdEval(_) => {
+            RunError::InvalidInput(anyhow::Error::new(e).context("invalid thresholds"))
+        }
+        _ => RunError::ScriptError(anyhow::Error::new(e).context("script run failed")),
+    })?;
 
     runtime
         .run_teardown(&run_ctx)
@@ -76,26 +83,11 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         }
     }
 
-    let metric_series = Some(run_ctx.metrics.summarize());
-
-    out.print_summary(&summary, metric_series.as_deref())
+    out.print_summary(&summary)
         .map_err(RunError::RuntimeError)?;
 
     let checks_failed = summary.scenarios.iter().any(|s| s.checks_failed_total > 0);
-
-    let threshold_violations = wrkr_core::evaluate_thresholds(&run_ctx.metrics, &opts.thresholds)
-        .map_err(|e| RunError::InvalidInput(anyhow::Error::new(e)))?;
-    let thresholds_failed = !threshold_violations.is_empty();
-
-    if thresholds_failed {
-        eprintln!("thresholds failed:");
-        for v in &threshold_violations {
-            match v.observed {
-                Some(obs) => eprintln!("  {}: {} (observed {obs})", v.metric, v.expression),
-                None => eprintln!("  {}: {} (missing metric)", v.metric, v.expression),
-            }
-        }
-    }
+    let thresholds_failed = !summary.threshold_violations.is_empty();
 
     Ok(ExitCode::from_quality_gates(
         checks_failed,

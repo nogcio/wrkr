@@ -81,6 +81,12 @@ async fn e2e_lua_runs_for_2s_and_sends_requests() -> anyhow::Result<()> {
                     stdout,
                     stderr
                 );
+                anyhow::ensure!(
+                    v.pointer("/thresholds/violations").is_some(),
+                    "expected a summary json object with `thresholds.violations`\nstdout:\n{}\nstderr:\n{}",
+                    stdout,
+                    stderr
+                );
             }
             _ => {}
         }

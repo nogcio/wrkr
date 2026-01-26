@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use wrkr_metrics::{KeyId, MetricId, Registry};
 
+use crate::error::Result;
 use crate::iteration_metrics::IterationMetricIds;
 use crate::progress::LiveMetrics;
 use crate::request_metrics::RequestMetricIds;
@@ -289,12 +290,20 @@ pub(crate) fn build_run_summary(
     iteration_ids: IterationMetricIds,
     checks_metric: MetricId,
     scenario_names: &[String],
-) -> RunSummary {
+    thresholds: &[crate::ThresholdSet],
+) -> Result<RunSummary> {
     let computer = MetricComputer::new(metrics, request_ids, iteration_ids, checks_metric);
     let scenarios = scenario_names
         .iter()
         .map(|name| computer.compute_scenario_summary(metrics, name))
         .collect();
 
-    RunSummary { scenarios }
+    let metrics_summary = metrics.summarize();
+    let threshold_violations = crate::thresholds_eval::evaluate_thresholds(metrics, thresholds)?;
+
+    Ok(RunSummary {
+        scenarios,
+        metrics: metrics_summary,
+        threshold_violations,
+    })
 }

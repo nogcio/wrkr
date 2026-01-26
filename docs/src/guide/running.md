@@ -37,6 +37,7 @@ wrkr run examples/plaintext.lua --output json
 - `kind: "progress"` lines are emitted periodically during the run.
 - A final `kind: "summary"` line is emitted at the end.
 - JSON keys are camelCase; time/latency values are seconds as floats (e.g. `elapsedSeconds`, `intervalSeconds`, `latencySeconds`).
+- The final summary line includes `thresholds.violations` for machine-readable quality-gate results.
 
 JSON Schema:
 

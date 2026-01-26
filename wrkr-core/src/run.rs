@@ -211,6 +211,7 @@ pub struct RunScenariosContext {
     pub request_metrics: RequestMetricIds,
     pub iteration_metrics: IterationMetricIds,
     pub checks_metric: wrkr_metrics::MetricId,
+    pub thresholds: Arc<[crate::ThresholdSet]>,
     #[cfg(feature = "grpc")]
     pub grpc: Arc<SharedGrpcRegistry>,
     #[cfg(feature = "http")]
@@ -232,6 +233,7 @@ impl RunScenariosContext {
             request_metrics,
             iteration_metrics,
             checks_metric,
+            thresholds: Arc::from([]),
             #[cfg(feature = "grpc")]
             grpc: Arc::new(SharedGrpcRegistry::default()),
             #[cfg(feature = "http")]
@@ -632,11 +634,14 @@ where
         let _ = h.await;
     }
 
-    Ok(super::metrics_agg::build_run_summary(
+    let summary = super::metrics_agg::build_run_summary(
         &run_ctx.metrics,
         run_ctx.request_metrics,
         run_ctx.iteration_metrics,
         run_ctx.checks_metric,
         &scenario_names,
-    ))
+        run_ctx.thresholds.as_ref(),
+    )?;
+
+    Ok(summary)
 }

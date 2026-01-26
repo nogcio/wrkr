@@ -161,15 +161,33 @@ impl OutputFormatter for HumanReadableOutput {
         }))
     }
 
-    fn print_summary(
-        &self,
-        summary: &wrkr_core::RunSummary,
-        metrics: Option<&[wrkr_core::MetricSeriesSummary]>,
-    ) -> anyhow::Result<()> {
+    fn print_summary(&self, summary: &wrkr_core::RunSummary) -> anyhow::Result<()> {
         self.progress.finish();
         let elapsed_ms = self.max_elapsed_ms.load(Ordering::Relaxed);
         let run_elapsed = (elapsed_ms > 0).then(|| std::time::Duration::from_millis(elapsed_ms));
-        print!("{}", render(summary, metrics, run_elapsed));
+        print!("{}", render(summary, run_elapsed));
+
+        if !summary.threshold_violations.is_empty() {
+            eprintln!("thresholds failed:");
+            for v in &summary.threshold_violations {
+                let key = if v.tags.is_empty() {
+                    v.metric.clone()
+                } else {
+                    let selector = v
+                        .tags
+                        .iter()
+                        .map(|(k, val)| format!("{k}={val}"))
+                        .collect::<Vec<_>>()
+                        .join(",");
+                    format!("{}{{{selector}}}", v.metric)
+                };
+                match v.observed {
+                    Some(obs) => eprintln!("  {key}: {} (observed {obs})", v.expression),
+                    None => eprintln!("  {key}: {} (missing series)", v.expression),
+                }
+            }
+        }
+
         Ok(())
     }
 }
