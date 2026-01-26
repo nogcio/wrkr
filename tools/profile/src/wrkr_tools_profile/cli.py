@@ -73,6 +73,62 @@ def grpc(
 
 
 @app.command()
+def grpc_samply(
+    sample_duration: Annotated[
+        int,
+        typer.Option(
+            "--sample-duration",
+            help="How long samply records stacks (seconds).",
+        ),
+    ] = 10,
+    load_duration: Annotated[
+        str,
+        typer.Option(
+            "--load-duration",
+            help="How long to keep the load test running (e.g. 30s).",
+        ),
+    ] = "30s",
+    vus: Annotated[
+        int,
+        typer.Option(
+            "--vus",
+            help="Number of virtual users.",
+            min=1,
+        ),
+    ] = 256,
+    open_ui: Annotated[
+        bool,
+        typer.Option(
+            "--open/--no-open",
+            help="Open the samply UI after recording.",
+        ),
+    ] = True,
+    script: Annotated[
+        str,
+        typer.Option(
+            "--script",
+            help="Lua script to run (relative to repo root).",
+        ),
+    ] = "tools/perf/wrkr_grpc_plaintext.lua",
+) -> None:
+    """Run a gRPC profiling session using samply (Linux) and open the UI."""
+    cfg = ProfileConfig(
+        sample_duration_seconds=sample_duration,
+        load_duration=load_duration,
+        vus=vus,
+        script=script,
+        pre_sample_sleep_seconds=0,
+        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+    )
+
+    try:
+        run_samply_profile(cfg, samply=SamplyConfig(open_ui=open_ui))
+    except ProfileError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        raise typer.Exit(code=1) from None
+
+
+@app.command()
 def wfb_grpc(
     sample_duration: Annotated[
         int,
@@ -128,6 +184,62 @@ def wfb_grpc(
     )
     try:
         run_profile(cfg)
+    except ProfileError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        raise typer.Exit(code=1) from None
+
+
+@app.command()
+def wfb_grpc_samply(
+    sample_duration: Annotated[
+        int,
+        typer.Option(
+            "--sample-duration",
+            help="How long samply records stacks (seconds).",
+        ),
+    ] = 10,
+    load_duration: Annotated[
+        str,
+        typer.Option(
+            "--load-duration",
+            help="How long to keep the load test running (e.g. 30s).",
+        ),
+    ] = "30s",
+    vus: Annotated[
+        int,
+        typer.Option(
+            "--vus",
+            help="Number of virtual users.",
+            min=1,
+        ),
+    ] = 50,
+    open_ui: Annotated[
+        bool,
+        typer.Option(
+            "--open/--no-open",
+            help="Open the samply UI after recording.",
+        ),
+    ] = True,
+    script: Annotated[
+        str,
+        typer.Option(
+            "--script",
+            help="Lua script to run (relative to repo root).",
+        ),
+    ] = "tools/perf/wfb_grpc_aggregate.lua",
+) -> None:
+    """Run a WFB gRPC profiling session using samply (Linux) and open the UI."""
+    cfg = ProfileConfig(
+        sample_duration_seconds=sample_duration,
+        load_duration=load_duration,
+        vus=vus,
+        script=script,
+        pre_sample_sleep_seconds=0,
+        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+    )
+
+    try:
+        run_samply_profile(cfg, samply=SamplyConfig(open_ui=open_ui))
     except ProfileError as e:
         print(f"ERROR: {e}", file=sys.stderr)
         raise typer.Exit(code=1) from None

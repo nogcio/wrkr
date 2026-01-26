@@ -27,7 +27,6 @@ PROFILE_ARGS ?=
 	tools-compare-perf-run \
 	tools-profile-grpc tools-profile-wfb-grpc \
 	tools-profile-grpc-aggregate-samply tools-profile-json-aggregate-samply
-	tools-profile-samply-status tools-profile-samply-enable
 
 help: ## Show available targets
 	@awk 'BEGIN {FS = ":.*##"} /^[a-zA-Z0-9_\-]+:.*##/ {printf "\033[36m%-24s\033[0m %s\n", $1, $2}' $(MAKEFILE_LIST)
@@ -55,7 +54,6 @@ lint-py: py-lint ## Lint Python code
 
 clippy: ## Lint Rust code (deny warnings)
 	$(CARGO) clippy --all-targets -- --deny warnings
-
 
 test: test-rust ## Run tests (Rust)
 
@@ -179,30 +177,8 @@ tools-compare-perf-run: ## Run compare-perf run
 # -------------------------
 # Tools: wrkr-tools-profile (CPU profiling)
 # -------------------------
-
-tools-profile-grpc: ## Profile gRPC plaintext (--sample-duration 10 --vus 256, PROFILE_ARGS=...)
-	$(UV) run --project $(PY_PROJECT) wrkr-tools-profile grpc $(PROFILE_ARGS)
-
-tools-profile-wfb-grpc: ## Profile gRPC with aggregation (WFB, --vus 256, PROFILE_ARGS=...)
-	$(UV) run --project $(PY_PROJECT) wrkr-tools-profile wfb-grpc $(PROFILE_ARGS)
-
 tools-profile-grpc-aggregate-samply: ## Profile grpc_aggregate via samply (PROFILE_ARGS=...)
 	$(UV) run --project $(PY_PROJECT) wrkr-tools-profile grpc-aggregate-samply $(PROFILE_ARGS)
 
 tools-profile-json-aggregate-samply: ## Profile json_aggregate via samply (PROFILE_ARGS=...)
 	$(UV) run --project $(PY_PROJECT) wrkr-tools-profile json-aggregate-samply $(PROFILE_ARGS)
-
-tools-profile-samply-status: ## Show perf_event_paranoid (Linux) for samply
-	@echo -n "kernel.perf_event_paranoid="; cat /proc/sys/kernel/perf_event_paranoid 2>/dev/null || echo "(unavailable)"
-
-tools-profile-samply-enable: ## Try to set perf_event_paranoid=1 (requires sudo)
-	@echo "Setting kernel.perf_event_paranoid=1 (needs sudo)..."
-	@set -euo pipefail; \
-	if echo '1' | sudo tee /proc/sys/kernel/perf_event_paranoid >/dev/null 2>&1; then \
-		$(MAKE) tools-profile-samply-status; \
-	else \
-		echo "ERROR: cannot write /proc/sys/kernel/perf_event_paranoid (likely read-only in this container)." >&2; \
-		echo "Fix: set it on the Docker host kernel (see .devcontainer/README.md)." >&2; \
-		echo "Note: some runtimes (e.g. Docker Desktop) may prevent adjusting this from containers." >&2; \
-		exit 1; \
-	fi
