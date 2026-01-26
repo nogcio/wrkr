@@ -4,7 +4,7 @@
   "title": "wrkr NDJSON v1 summary line",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "kind", "scenarios", "totals"],
+  "required": ["schema", "kind", "scenarios", "totals", "thresholds"],
   "properties": {
     "schema": { "const": "wrkr.ndjson.v1" },
     "kind": { "const": "summary" },
@@ -151,6 +151,31 @@
         "bytesSentTotal": { "type": "integer", "minimum": 0 },
         "iterationsTotal": { "type": "integer", "minimum": 0 },
         "checksFailedTotal": { "type": "integer", "minimum": 0 }
+      }
+    }
+    ,
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["violations"],
+      "properties": {
+        "violations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["metric", "tags", "expression", "observed"],
+            "properties": {
+              "metric": { "type": "string", "minLength": 1 },
+              "tags": {
+                "type": "object",
+                "additionalProperties": { "type": "string" }
+              },
+              "expression": { "type": "string", "minLength": 1 },
+              "observed": { "type": ["number", "null"] }
+            }
+          }
+        }
       }
     }
   }

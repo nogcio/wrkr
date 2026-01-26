@@ -32,7 +32,29 @@ fn parse_script_options_thresholds_table() -> Result<()> {
     let opts = wrkr_lua::parse_script_options(&run_ctx)?;
     assert_eq!(opts.thresholds.len(), 1);
     assert_eq!(opts.thresholds[0].metric, "http_req_duration");
+    assert!(opts.thresholds[0].tags.is_empty());
     assert_eq!(opts.thresholds[0].expressions, vec!["avg<0".to_string()]);
+
+    Ok(())
+}
+
+#[test]
+fn parse_script_options_thresholds_selector_key() -> Result<()> {
+    let script = support::load_test_script("thresholds_selectors.lua")?;
+    let env = support::env_with(&[]);
+    let run_ctx = support::run_ctx_for_script(&script, env);
+
+    let opts = wrkr_lua::parse_script_options(&run_ctx)?;
+    assert_eq!(opts.thresholds.len(), 1);
+    assert_eq!(opts.thresholds[0].metric, "my_counter");
+    assert_eq!(
+        opts.thresholds[0].tags,
+        vec![
+            ("group".to_string(), "login".to_string()),
+            ("method".to_string(), "GET".to_string())
+        ]
+    );
+    assert_eq!(opts.thresholds[0].expressions, vec!["count>0".to_string()]);
 
     Ok(())
 }

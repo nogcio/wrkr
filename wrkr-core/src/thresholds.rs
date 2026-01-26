@@ -1,6 +1,11 @@
 #[derive(Debug, Clone)]
 pub struct ThresholdSet {
     pub metric: String,
+    /// Optional tag selector for this threshold set.
+    ///
+    /// When non-empty, the threshold is evaluated only against series whose tags match the
+    /// selector (order-insensitive).
+    pub tags: Vec<(String, String)>,
     pub expressions: Vec<String>,
 }
 
@@ -33,8 +38,72 @@ pub struct ThresholdExpr {
 #[derive(Debug, Clone)]
 pub struct ThresholdViolation {
     pub metric: String,
+    pub tags: Vec<(String, String)>,
     pub expression: String,
     pub observed: Option<f64>,
+}
+
+pub fn parse_threshold_metric_key(raw: &str) -> Result<(String, Vec<(String, String)>), String> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Err("empty metric key".to_string());
+    }
+
+    let Some((name_raw, selector_with_brace)) = raw.split_once('{') else {
+        return Ok((raw.to_string(), Vec::new()));
+    };
+
+    let name = name_raw.trim();
+    if name.is_empty() {
+        return Err(format!("invalid metric key (missing metric name): {raw}"));
+    }
+
+    let selector = selector_with_brace
+        .strip_suffix('}')
+        .ok_or_else(|| format!("invalid metric key (missing `}}`): {raw}"))?;
+
+    // v1: simple selector values (no escaping/quoting).
+    // Whitespace is ignored around tokens, but not allowed inside keys/values.
+    let mut tags: Vec<(String, String)> = Vec::new();
+
+    for part in selector.split(',') {
+        let part = part.trim();
+        if part.is_empty() {
+            continue;
+        }
+
+        let (k_raw, v_raw) = part
+            .split_once('=')
+            .ok_or_else(|| format!("invalid selector pair (expected k=v): {raw}"))?;
+        let k = k_raw.trim();
+        let v = v_raw.trim();
+        if k.is_empty() || v.is_empty() {
+            return Err(format!("invalid selector pair (empty key/value): {raw}"));
+        }
+
+        let is_simple = |s: &str| {
+            !s.chars()
+                .any(|c| c.is_whitespace() || matches!(c, '{' | '}' | ',' | '='))
+        };
+        if !is_simple(k) || !is_simple(v) {
+            return Err(format!(
+                "invalid selector (unsupported characters in key/value): {raw}"
+            ));
+        }
+
+        if tags.iter().any(|(ek, _)| ek == k) {
+            return Err(format!("invalid selector (duplicate tag key `{k}`): {raw}"));
+        }
+
+        tags.push((k.to_string(), v.to_string()));
+    }
+
+    if tags.is_empty() {
+        return Err(format!("invalid metric key (empty selector): {raw}"));
+    }
+
+    tags.sort_unstable_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.cmp(&b.1)));
+    Ok((name.to_string(), tags))
 }
 
 pub fn parse_threshold_expr(raw: &str) -> Result<ThresholdExpr, String> {
@@ -110,5 +179,28 @@ mod tests {
             Err(e) => e,
         };
         assert!(err.contains("out of range"));
+    }
+
+    #[test]
+    fn parse_threshold_metric_key_without_selector() {
+        let (name, tags) =
+            parse_threshold_metric_key("http_req_duration").unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(name, "http_req_duration");
+        assert!(tags.is_empty());
+    }
+
+    #[test]
+    fn parse_threshold_metric_key_with_selector_trims_and_sorts() {
+        let (name, tags) =
+            parse_threshold_metric_key("http_req_duration{ group = login , method=GET }")
+                .unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(name, "http_req_duration");
+        assert_eq!(
+            tags,
+            vec![
+                ("group".to_string(), "login".to_string()),
+                ("method".to_string(), "GET".to_string())
+            ]
+        );
     }
 }

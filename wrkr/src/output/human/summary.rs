@@ -6,12 +6,10 @@ use crate::output::human::format::format_duration_from_micros_opt;
 
 use super::format::*;
 
-pub(crate) fn render(
-    summary: &wrkr_core::RunSummary,
-    metric_series: Option<&[wrkr_core::MetricSeriesSummary]>,
-    run_elapsed: Option<Duration>,
-) -> String {
+pub(crate) fn render(summary: &wrkr_core::RunSummary, run_elapsed: Option<Duration>) -> String {
     let mut out = String::new();
+
+    let metric_series = (!summary.metrics.is_empty()).then_some(summary.metrics.as_slice());
 
     if summary.scenarios.is_empty() {
         out.push_str("summary: no scenarios\n");
@@ -404,9 +402,10 @@ mod tests {
                 checks_failed: [("status_is_200".to_string(), 1)].into_iter().collect(),
                 latency: None,
             }],
+            ..Default::default()
         };
 
-        let text = render(&summary, None, Some(Duration::from_secs(10)));
+        let text = render(&summary, Some(Duration::from_secs(10)));
         assert!(text.contains("scenario: default"));
         assert!(text.contains("requests: 10"));
         assert!(text.contains("failed 2"));
@@ -421,8 +420,6 @@ mod tests {
 
     #[test]
     fn render_checks_includes_pass_fail_and_tags() {
-        let summary = wrkr_core::RunSummary { scenarios: vec![] };
-
         let series = vec![
             wrkr_core::MetricSeriesSummary {
                 name: "checks".to_string(),
@@ -450,7 +447,13 @@ mod tests {
             },
         ];
 
-        let text = render(&summary, Some(&series), None);
+        let summary = wrkr_core::RunSummary {
+            scenarios: vec![],
+            metrics: series,
+            ..Default::default()
+        };
+
+        let text = render(&summary, None);
         assert!(text.contains("checks"));
         assert!(text.contains("scenario: Default"));
         assert!(text.contains("group: g1"));
@@ -462,8 +465,6 @@ mod tests {
 
     #[test]
     fn render_metrics_combines_vu_active_end_and_peak() {
-        let summary = wrkr_core::RunSummary { scenarios: vec![] };
-
         let series = vec![
             wrkr_core::MetricSeriesSummary {
                 name: "vu_active".to_string(),
@@ -485,7 +486,13 @@ mod tests {
             },
         ];
 
-        let text = render(&summary, Some(&series), None);
+        let summary = wrkr_core::RunSummary {
+            scenarios: vec![],
+            metrics: series,
+            ..Default::default()
+        };
+
+        let text = render(&summary, None);
         assert!(text.contains("vu_active = end=0 peak=10"));
         assert!(!text.contains("vu_active_max"));
     }

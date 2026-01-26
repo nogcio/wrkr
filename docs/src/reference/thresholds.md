@@ -13,6 +13,22 @@ options = {
 }
 ```
 
+## Tag selectors
+
+Threshold keys may include an optional tag selector block:
+
+- Base (all series aggregated): `http_req_duration`
+- Tag-scoped: `http_req_duration{group=login}`
+- Multiple tags: `http_req_duration{group=login,method=GET}`
+
+Rules (v1):
+
+- Whitespace inside `{ ... }` is ignored.
+- Tag order does not matter.
+- Keys/values are “simple” strings (no escaping/quoting).
+
+The selector matches series that contain **all** the specified tags; extra tags on the series do not prevent a match.
+
 ## Expression format
 
 An expression is:
@@ -32,5 +48,5 @@ Examples:
 
 Notes:
 
-- Thresholds are evaluated on *untagged* series (global totals for the metric).
-- If a metric is missing, the threshold fails.
+- Thresholds without a selector are evaluated over the global aggregate for the metric.
+- If no matching series exists for a selector, the threshold fails.

@@ -42,4 +42,7 @@ pub enum Error {
 
     #[error("invalid output path: `{0}`")]
     InvalidOutputPath(String),
+
+    #[error(transparent)]
+    ThresholdEval(#[from] crate::thresholds_eval::Error),
 }
