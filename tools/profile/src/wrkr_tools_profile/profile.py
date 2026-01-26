@@ -5,13 +5,12 @@ import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from shutil import which
 
 from wrkr_tools_common.repo import RepoError, find_repo_root
-from wrkr_tools_common.server import ServerError, TestServer
-
-
-class ProfileError(RuntimeError):
-    """Raised when profiling setup or execution fails."""
+from .env import format_env_templates
+from .errors import ProfileError
+from .session import build_profiling, run_warmup, testserver_targets
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +22,9 @@ class ProfileConfig:
     vus: int
     script: str
     pre_sample_sleep_seconds: int = 0
+    # Environment variables passed to `wrkr run` as `--env KEY=VALUE`.
+    # Values can reference server-provided placeholders: {BASE_URL} and {GRPC_TARGET}.
+    env_templates: tuple[str, ...] = ()
 
 
 def run_profile(cfg: ProfileConfig) -> None:
@@ -42,38 +44,25 @@ def run_profile(cfg: ProfileConfig) -> None:
         raise ProfileError(str(e)) from e
     print(f"Repo root: {root}")
 
-    if sys.platform != "darwin":
-        raise ProfileError("wrkr-tools-profile currently supports macOS only (requires 'sample').")
-
-    _build_profiling(root)
-
-    server_bin = root / "target" / "profiling" / "wrkr-testserver"
-    if not server_bin.exists():
-        raise ProfileError(f"Missing wrkr-testserver binary: {server_bin}")
-
-    try:
-        server = TestServer.start(
-            root=root,
-            server_bin=server_bin,
-            on_log=lambda m: print(m, flush=True),
+    if sys.platform not in {"darwin", "linux"}:
+        raise ProfileError(
+            "wrkr-tools-profile currently supports macOS ('sample') and Linux ('perf') only."
         )
-    except ServerError as e:
-        raise ProfileError(str(e)) from e
 
-    with server:
-        try:
-            targets = server.wait_for_targets(
-                timeout_s=10.0,
-                on_log=lambda m: print(m, flush=True),
-            )
-        except ServerError as e:
-            raise ProfileError(str(e)) from e
+    build_profiling(root)
 
+    with testserver_targets(root=root) as targets:
         grpc_target = targets.grpc_target
         print(f"GRPC_TARGET={grpc_target}")
 
+        env_kv = format_env_templates(
+            cfg.env_templates,
+            base_url=targets.base_url,
+            grpc_target=grpc_target,
+        )
+
         # Warmup.
-        _run_warmup(root, cfg.script, grpc_target)
+        run_warmup(root, cfg.script, env_kv)
 
         # Prepare output file.
         tmp_dir = root / "tmp"
@@ -92,6 +81,11 @@ def run_profile(cfg: ProfileConfig) -> None:
             f"Running wrkr (vus={cfg.vus}, duration={cfg.load_duration}, script={cfg.script})...",
             flush=True,
         )
+
+        env_args: list[str] = []
+        for kv in env_kv:
+            env_args.extend(["--env", kv])
+
         wrkr_proc = subprocess.Popen(
             [
                 str(wrkr_bin),
@@ -101,8 +95,7 @@ def run_profile(cfg: ProfileConfig) -> None:
                 cfg.load_duration,
                 "--vus",
                 str(cfg.vus),
-                "--env",
-                f"GRPC_TARGET={grpc_target}",
+                *env_args,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -116,72 +109,159 @@ def run_profile(cfg: ProfileConfig) -> None:
             )
             time.sleep(cfg.pre_sample_sleep_seconds)
 
-        # Run sample.
-        print(
-            f"Sampling for {cfg.sample_duration_seconds}s (output: {sample_out})...",
-            flush=True,
-        )
-        sample_result = subprocess.run(
-            [
-                "sample",
-                str(wrkr_proc.pid),
-                str(cfg.sample_duration_seconds),
-                "-file",
-                str(sample_out),
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            check=False,
-        )
+        # Capture stacks.
+        if sys.platform == "darwin":
+            _run_macos_sample(
+                pid=wrkr_proc.pid,
+                duration_seconds=cfg.sample_duration_seconds,
+                out_file=sample_out,
+            )
+        else:
+            _run_linux_perf(
+                pid=wrkr_proc.pid,
+                duration_seconds=cfg.sample_duration_seconds,
+                out_prefix=sample_out,
+            )
 
         wrkr_proc.wait()
 
-        if sample_result.returncode != 0:
-            raise ProfileError(
-                f"'sample' failed (exit {sample_result.returncode}). "
-                f"Try running: sample {wrkr_proc.pid} {cfg.sample_duration_seconds} -file {sample_out}"
-            )
-
-        print(f"\nSample written to: {sample_out}")
-        print("Top hint: search for 'Call graph:' and 'Heaviest stack' inside that file.")
+        print("\nProfiling artifacts written under tmp/.")
 
         # Server is managed by the context manager.
 
 
-def _build_profiling(root: Path) -> None:
-    """Build wrkr binaries in profiling mode."""
-    print("Building profiling binaries (cargo build --profile profiling)...", flush=True)
+def _run_macos_sample(*, pid: int, duration_seconds: int, out_file: Path) -> None:
+    if which("sample") is None:
+        raise ProfileError("Missing required tool: 'sample' (macOS only).")
+
+    print(
+        f"Sampling for {duration_seconds}s via macOS 'sample' (output: {out_file})...",
+        flush=True,
+    )
     result = subprocess.run(
-        ["cargo", "build", "--profile", "profiling"],
-        cwd=str(root),
+        [
+            "sample",
+            str(pid),
+            str(duration_seconds),
+            "-file",
+            str(out_file),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+    if result.returncode != 0:
+        raise ProfileError(
+            f"'sample' failed (exit {result.returncode}). "
+            f"Try running: sample {pid} {duration_seconds} -file {out_file}"
+        )
+
+    print(f"Sample written to: {out_file}")
+    print("Top hint: search for 'Call graph:' and 'Heaviest stack' inside that file.")
+
+
+def _run_linux_perf(*, pid: int, duration_seconds: int, out_prefix: Path) -> None:
+    perf = which("perf")
+    if perf is None:
+        raise ProfileError(
+            "Missing required tool: 'perf'. In the devcontainer, install it via apt (linux-tools)."
+        )
+
+    perf_data = out_prefix.with_suffix("")
+    perf_data = perf_data.with_name(f"{perf_data.name}_perf_{duration_seconds}s.data")
+    perf_report = perf_data.with_suffix(".report.txt")
+    perf_script = perf_data.with_suffix(".script.txt")
+    perf_folded = perf_data.with_suffix(".folded.txt")
+    perf_flamegraph = perf_data.with_suffix(".flamegraph.svg")
+
+    perf_data.unlink(missing_ok=True)
+    perf_report.unlink(missing_ok=True)
+    perf_script.unlink(missing_ok=True)
+    perf_folded.unlink(missing_ok=True)
+    perf_flamegraph.unlink(missing_ok=True)
+
+    print(
+        f"Sampling for {duration_seconds}s via perf (data: {perf_data})...",
+        flush=True,
+    )
+
+    # Note: perf may require extra privileges in containers.
+    record = subprocess.run(
+        [
+            perf,
+            "record",
+            "-F",
+            "99",
+            "-g",
+            "--call-graph",
+            "dwarf",
+            "-p",
+            str(pid),
+            "-o",
+            str(perf_data),
+            "--",
+            "sleep",
+            str(duration_seconds),
+        ],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         text=True,
         check=False,
     )
-    if result.returncode != 0:
-        print(result.stderr, file=sys.stderr)
-        raise ProfileError(f"cargo build failed (exit {result.returncode})")
 
+    if record.returncode != 0:
+        hint = ""
+        if record.stderr:
+            hint = record.stderr.strip()
+        raise ProfileError(
+            "perf record failed. This often means the container lacks permission to access perf events. "
+            "Try running the devcontainer with extra privileges (or adjust host sysctl for perf_event_paranoid). "
+            f"Details: {hint}"
+        )
 
-def _run_warmup(root: Path, script: str, grpc_target: str) -> None:
-    """Run a quick warmup to avoid one-time startup costs in the sample."""
-    print("Running warmup (1s, 64 vus)...", flush=True)
-    wrkr_bin = root / "target" / "profiling" / "wrkr"
+    # Produce human-readable artifacts alongside perf.data.
     subprocess.run(
-        [
-            str(wrkr_bin),
-            "run",
-            script,
-            "--duration",
-            "1s",
-            "--vus",
-            "64",
-            "--env",
-            f"GRPC_TARGET={grpc_target}",
-        ],
-        cwd=str(root),
-        stdout=subprocess.DEVNULL,
+        [perf, "script", "-i", str(perf_data)],
+        stdout=perf_script.open("w", encoding="utf-8"),
         stderr=subprocess.DEVNULL,
-        check=True,
+        check=False,
     )
+    subprocess.run(
+        [perf, "report", "--stdio", "-i", str(perf_data)],
+        stdout=perf_report.open("w", encoding="utf-8"),
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+
+    inferno_collapse = which("inferno-collapse-perf")
+    inferno_flamegraph = which("inferno-flamegraph")
+    if inferno_collapse is not None and inferno_flamegraph is not None:
+        # Produce a browser-friendly flamegraph SVG alongside the raw perf artifacts.
+        with perf_script.open("r", encoding="utf-8") as in_f, perf_folded.open(
+            "w", encoding="utf-8"
+        ) as out_f:
+            subprocess.run(
+                [inferno_collapse],
+                stdin=in_f,
+                stdout=out_f,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+
+        with perf_folded.open("r", encoding="utf-8") as in_f, perf_flamegraph.open(
+            "w", encoding="utf-8"
+        ) as out_f:
+            subprocess.run(
+                [inferno_flamegraph],
+                stdin=in_f,
+                stdout=out_f,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+
+    print(f"perf data written to: {perf_data}")
+    print(f"perf report written to: {perf_report}")
+    print(f"perf script written to: {perf_script}")
+    if perf_flamegraph.exists():
+        print(f"perf flamegraph written to: {perf_flamegraph}")

@@ -2154,6 +2154,7 @@ dependencies = [
  "bytes",
  "dashmap",
  "hdrhistogram",
+ "smallvec",
  "strum",
  "thiserror",
  "tokio",

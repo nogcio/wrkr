@@ -1,6 +1,7 @@
 // use std::sync::Arc;
 use dashmap::DashMap;
 use parking_lot::RwLock;
+use smallvec::SmallVec;
 
 use crate::key::{Interner, KeyId};
 use crate::metrics::{MetricHandle, MetricKind, MetricSeriesSummary, MetricStorage, MetricValue};
@@ -65,7 +66,7 @@ impl Registry {
     }
 
     pub fn resolve_tags(&self, tags: &[(&str, &str)]) -> TagSet {
-        let mut resolved: Vec<(KeyId, KeyId)> = tags
+        let mut resolved: SmallVec<[(KeyId, KeyId); 4]> = tags
             .iter()
             .map(|(k, v)| (self.resolve_key(k), self.resolve_key(v)))
             .collect();

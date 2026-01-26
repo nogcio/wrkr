@@ -2,7 +2,7 @@ use mlua::{Lua, Value};
 
 use crate::Result;
 
-pub fn encode(_lua: &Lua, value: Value) -> Result<String> {
+pub fn encode_to_vec(value: Value) -> Result<Vec<u8>> {
     // Transcode from Lua's serde Deserializer straight into serde_json's Serializer,
     // avoiding an intermediate serde_json::Value allocation tree.
     let mut out = Vec::with_capacity(256);
@@ -10,6 +10,11 @@ pub fn encode(_lua: &Lua, value: Value) -> Result<String> {
     let deserializer = mlua::serde::de::Deserializer::new(value);
     serde_transcode::transcode(deserializer, &mut serializer).map_err(mlua::Error::external)?;
 
+    Ok(out)
+}
+
+pub fn encode(_lua: &Lua, value: Value) -> Result<String> {
+    let out = encode_to_vec(value)?;
     // serde_json always emits UTF-8.
     let s = String::from_utf8(out).map_err(mlua::Error::external)?;
     Ok(s)

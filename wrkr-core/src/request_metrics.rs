@@ -1,5 +1,6 @@
 use std::sync::atomic::Ordering;
 
+use smallvec::SmallVec;
 use wrkr_metrics::{MetricHandle, MetricId, MetricKind, Registry};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, strum::Display, strum::EnumString)]
@@ -7,6 +8,15 @@ use wrkr_metrics::{MetricHandle, MetricId, MetricKind, Registry};
 pub enum Protocol {
     Http,
     Grpc,
+}
+
+impl Protocol {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Protocol::Http => "http",
+            Protocol::Grpc => "grpc",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -51,7 +61,7 @@ impl RequestMetricIds {
         sample: RequestSample<'_>,
         extra_tags: &[(&str, &str)],
     ) {
-        let protocol_str = sample.protocol.to_string();
+        let protocol_str = sample.protocol.as_str();
 
         let filter_extra =
             |(k, _v): &(&str, &str)| !matches!(*k, "scenario" | "protocol" | "error_kind");
@@ -61,48 +71,46 @@ impl RequestMetricIds {
                 return metrics.resolve_tags(base);
             }
 
-            let mut merged: Vec<(&str, &str)> = Vec::with_capacity(base.len() + extra_tags.len());
+            let mut merged: SmallVec<[(&str, &str); 8]> =
+                SmallVec::with_capacity(base.len() + extra_tags.len());
             merged.extend_from_slice(base);
             merged.extend(extra_tags.iter().copied().filter(filter_extra));
             metrics.resolve_tags(&merged)
         };
 
         // Counters (protocol-scoped)
-        let tags = resolve(&[
-            ("scenario", sample.scenario),
-            ("protocol", protocol_str.as_str()),
-        ]);
+        let tags_protocol = resolve(&[("scenario", sample.scenario), ("protocol", protocol_str)]);
 
         if let Some(MetricHandle::Counter(c)) =
-            metrics.get_handle(self.requests_total, tags.clone())
+            metrics.get_handle(self.requests_total, tags_protocol.clone())
         {
             c.fetch_add(1, Ordering::Relaxed);
         }
 
         if let Some(MetricHandle::Counter(c)) =
-            metrics.get_handle(self.bytes_received_total, tags.clone())
+            metrics.get_handle(self.bytes_received_total, tags_protocol.clone())
         {
             c.fetch_add(sample.bytes_received, Ordering::Relaxed);
         }
 
-        if let Some(MetricHandle::Counter(c)) = metrics.get_handle(self.bytes_sent_total, tags) {
+        if let Some(MetricHandle::Counter(c)) =
+            metrics.get_handle(self.bytes_sent_total, tags_protocol.clone())
+        {
             c.fetch_add(sample.bytes_sent, Ordering::Relaxed);
         }
 
         // Errors (two series: total + by-kind)
         if !sample.ok {
-            let tags = resolve(&[
-                ("scenario", sample.scenario),
-                ("protocol", protocol_str.as_str()),
-            ]);
-            if let Some(MetricHandle::Counter(c)) = metrics.get_handle(self.errors_total, tags) {
+            if let Some(MetricHandle::Counter(c)) =
+                metrics.get_handle(self.errors_total, tags_protocol.clone())
+            {
                 c.fetch_add(1, Ordering::Relaxed);
             }
 
             if let Some(kind) = sample.error_kind {
                 let tags = resolve(&[
                     ("scenario", sample.scenario),
-                    ("protocol", protocol_str.as_str()),
+                    ("protocol", protocol_str),
                     ("error_kind", kind),
                 ]);
                 if let Some(MetricHandle::Counter(c)) =
@@ -122,11 +130,7 @@ impl RequestMetricIds {
             let _ = h.record(latency.max(1));
         }
 
-        let tags = resolve(&[
-            ("scenario", sample.scenario),
-            ("protocol", protocol_str.as_str()),
-        ]);
-        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency, tags) {
+        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency, tags_protocol) {
             let mut h = h.lock();
             let _ = h.record(latency.max(1));
         }

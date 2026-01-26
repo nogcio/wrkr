@@ -11,7 +11,9 @@ For `perf record` to work reliably in a container, you generally need both:
    - `--cap-add=SYS_PTRACE`
    - `--security-opt=seccomp=unconfined`
 
-2) Host kernel settings (must be set on the Docker host, not inside the container):
+2) Host kernel settings (must be set on the Docker host kernel, not inside the container).
+
+   Note: trying to apply these via `docker run --sysctl=...` may be rejected by some runtimes (e.g. Docker Desktop).
 
 ```bash
 sudo sysctl -w kernel.perf_event_paranoid=1

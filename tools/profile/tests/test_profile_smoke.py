@@ -1,13 +1,10 @@
 from __future__ import annotations
 
-import sys
-
 import pytest
 
 from wrkr_tools_profile.profile import ProfileConfig, run_profile
 
 
-@pytest.mark.skipif(sys.platform != "darwin", reason="macOS-only profiling tool")
 def test_profile_config_dataclass_smoke() -> None:
     cfg = ProfileConfig(
         sample_duration_seconds=1,

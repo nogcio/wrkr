@@ -81,7 +81,7 @@ async fn request_impl(
                     "application/json; charset=utf-8".to_string(),
                 ));
             }
-            bytes::Bytes::from(crate::json_util::encode(lua, v).map_err(mlua::Error::external)?)
+            bytes::Bytes::from(crate::json_util::encode_to_vec(v).map_err(mlua::Error::external)?)
         }
     };
 
