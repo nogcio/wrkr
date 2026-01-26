@@ -10,7 +10,7 @@ Today, `wrkr` is script-driven via Lua (see [`wrkr-lua/README.md`](wrkr-lua/READ
 - Script-driven scenarios and checks (current engine: Lua)
 - Scenarios/executors: `constant-vus`, `ramping-vus`, `ramping-arrival-rate`
 - Per-run overrides via CLI flags (`--vus`, `--duration`, `--iterations`, `--env KEY=VALUE`)
-- Human summary output or JSON progress lines (NDJSON) via `--output`
+- Human summary output or JSON lines (NDJSON) via `--output`
 
 ## Install
 
@@ -128,6 +128,13 @@ wrkr run examples/json_aggregate.lua --iterations 1000 --output json
 wrkr run examples/grpc_aggregate.lua --env GRPC_TARGET=http://127.0.0.1:50051
 wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 ```
+
+### JSON output (NDJSON)
+
+When using `--output json`, `wrkr` emits one JSON object per line to stdout:
+
+- `kind: "progress"` lines during the run
+- one final `kind: "summary"` line at the end (per-scenario + totals)
 
 ## Scripting (Lua today)
 

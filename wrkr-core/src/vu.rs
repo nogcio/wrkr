@@ -104,6 +104,13 @@ impl VuContext {
             .run_ctx
             .metrics
             .register("vu_active", MetricKind::Gauge);
+
+        // Track the peak active VUs during the run.
+        // This avoids a confusing `vu_active = 0` in end-of-run summaries.
+        let peak_handle = self
+            .run_ctx
+            .metrics
+            .register("vu_active_max", MetricKind::Gauge);
         let tags = self
             .run_ctx
             .metrics
@@ -111,7 +118,25 @@ impl VuContext {
 
         if let Some(MetricHandle::Gauge(g)) = self.run_ctx.metrics.get_handle(handle, tags.clone())
         {
-            g.fetch_add(1, Ordering::Relaxed);
+            let new_active = g.fetch_add(1, Ordering::Relaxed).saturating_add(1);
+
+            if let Some(MetricHandle::Gauge(peak)) =
+                self.run_ctx.metrics.get_handle(peak_handle, tags.clone())
+            {
+                // CAS loop to keep the max without races.
+                let mut cur = peak.load(Ordering::Relaxed);
+                while new_active > cur {
+                    match peak.compare_exchange_weak(
+                        cur,
+                        new_active,
+                        Ordering::Relaxed,
+                        Ordering::Relaxed,
+                    ) {
+                        Ok(_) => break,
+                        Err(observed) => cur = observed,
+                    }
+                }
+            }
         }
 
         ActiveVuGuard {

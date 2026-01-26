@@ -42,16 +42,53 @@ async fn e2e_lua_runs_for_2s_and_sends_requests() -> anyhow::Result<()> {
         stderr
     );
 
-    let last_line = stdout
-        .lines()
-        .rev()
-        .find(|l| !l.trim().is_empty())
-        .unwrap_or("");
-    let v: serde_json::Value = serde_json::from_str(last_line)
-        .with_context(|| format!("failed to parse json progress line: {last_line}"))?;
+    let mut saw_progress = false;
+    let mut saw_summary = false;
+    let mut last_progress_line = String::new();
+
+    for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
+        let v: serde_json::Value = serde_json::from_str(line)
+            .with_context(|| format!("failed to parse json line: {line}"))?;
+
+        match v.get("kind").and_then(serde_json::Value::as_str) {
+            Some("progress") => {
+                saw_progress = true;
+                last_progress_line = line.to_string();
+                anyhow::ensure!(
+                    v.get("elapsed_secs").is_some(),
+                    "expected a progress json object with `elapsed_secs` key\nstdout:\n{}\nstderr:\n{}",
+                    stdout,
+                    stderr
+                );
+            }
+            Some("summary") => {
+                saw_summary = true;
+                anyhow::ensure!(
+                    v.get("totals").is_some(),
+                    "expected a summary json object with `totals` key\nstdout:\n{}\nstderr:\n{}",
+                    stdout,
+                    stderr
+                );
+            }
+            _ => {}
+        }
+    }
+
     anyhow::ensure!(
-        v.get("elapsed_secs").is_some(),
-        "expected a progress json object with `elapsed_secs` key\nstdout:\n{}\nstderr:\n{}",
+        saw_progress,
+        "expected at least one progress json line\nstdout:\n{}\nstderr:\n{}",
+        stdout,
+        stderr
+    );
+    anyhow::ensure!(
+        saw_summary,
+        "expected a final summary json line\nstdout:\n{}\nstderr:\n{}",
+        stdout,
+        stderr
+    );
+    anyhow::ensure!(
+        !last_progress_line.is_empty(),
+        "expected to capture a progress json line\nstdout:\n{}\nstderr:\n{}",
         stdout,
         stderr
     );

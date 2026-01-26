@@ -458,6 +458,11 @@ where
             let mut interval = tokio::time::interval(std::time::Duration::from_secs(1));
             interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
+            // tokio::time::interval yields an immediate first tick. For progress reporting we want
+            // the first emission after ~1s so rate calculations and running stats aren't skewed
+            // by an initial ~0s sample.
+            interval.tick().await;
+
             let mut tick_id: u64 = 0;
             let mut last_at = Instant::now();
 
@@ -491,13 +496,23 @@ where
                     let st = state_by_scenario.entry(s.name.clone()).or_default();
 
                     let prev = st.has_prev.then_some(st.prev);
-                    let (metrics_live, snapshot) = computer.compute_live_metrics(
+                    let (mut metrics_live, snapshot) = computer.compute_live_metrics(
                         &metrics,
                         s.name.as_str(),
                         prev,
                         dt_secs,
                         &mut st.rps_stats,
                     );
+
+                    // Make `req_per_sec_avg` a true average across the run so far.
+                    // This avoids sensitivity to sampling jitter and matches total/elapsed.
+                    let elapsed_secs = elapsed.as_secs_f64().max(1e-9);
+                    metrics_live.req_per_sec_avg = (snapshot.requests_total as f64) / elapsed_secs;
+                    metrics_live.req_per_sec_stdev_pct = if metrics_live.req_per_sec_avg > 0.0 {
+                        (metrics_live.req_per_sec_stdev / metrics_live.req_per_sec_avg) * 100.0
+                    } else {
+                        0.0
+                    };
 
                     st.prev = snapshot;
                     st.has_prev = true;
@@ -555,6 +570,7 @@ where
 
                     (progress)(ProgressUpdate {
                         tick: tick_id,
+                        interval: dt,
                         elapsed,
                         scenario: s.name.clone(),
                         exec: s.exec.clone(),

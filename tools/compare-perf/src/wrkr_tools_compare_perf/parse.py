@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from typing import Final
@@ -121,6 +122,8 @@ def parse_wrkr_rps(*, stdout: str, stderr: str) -> Rps:
     Parse wrkr RPS from stdout/stderr.
 
     Supported formats (matching legacy + current behavior):
+    0) JSON progress lines (NDJSON) emitted by `wrkr --output json`:
+        {"elapsed_secs": 1, "total_requests": 123, "req_per_sec_avg": 123.0, ...}
     1) Legacy:
         rps: 1234
     2) k6-like summary lines:
@@ -129,6 +132,11 @@ def parse_wrkr_rps(*, stdout: str, stderr: str) -> Rps:
         iterations......................: ...
        Preference order: grpc_reqs, then http_reqs, then iterations.
     """
+    # Prefer machine-readable NDJSON when present.
+    js = try_parse_wrkr_json_summary(stdout=stdout, stderr=stderr)
+    if js is not None:
+        return Rps(js.rps)
+
     try:
         return _parse_wrkr_rps_text(stdout)
     except ParseError:
@@ -190,6 +198,271 @@ def _parse_wrkr_rps_text(text: str) -> Rps:
         return Rps(iterations_rps)
 
     raise ParseError("failed to parse wrkr RPS")
+
+
+@dataclass(frozen=True, slots=True)
+class WrkrJsonSummary:
+        """Summary extracted from wrkr NDJSON output.
+
+        `wrkr --output json` emits:
+            - `kind="progress"` lines during the run
+            - a final `kind="summary"` line at the end
+
+        We combine the last progress line (for rates) with the final summary line
+        (for totals and latency percentiles where available).
+        """
+
+        elapsed_secs: int
+        total_requests: int
+        rps: float
+
+        checks_failed_total: int
+        latency_mean_ms: float | None
+        latency_p50_ms: int | None
+        latency_p90_ms: int | None
+        latency_p99_ms: int | None
+        latency_max_ms: int | None
+
+        bytes_received_per_sec: int | None
+        bytes_sent_per_sec: int | None
+
+
+def try_parse_wrkr_json_summary(*, stdout: str, stderr: str) -> WrkrJsonSummary | None:
+    """Try to parse wrkr's JSON progress output (NDJSON).
+
+    Returns None if no JSON progress lines are found.
+
+    Raises ParseError if JSON is detected but required fields are missing/invalid.
+    """
+
+    last_progress: dict[str, object] | None = None
+    last_summary: dict[str, object] | None = None
+    saw_json = False
+
+    for text in (stdout, stderr):
+        for raw in text.splitlines():
+            obj = _try_parse_json_object_line(raw)
+            if obj is None:
+                continue
+            saw_json = True
+
+            kind = obj.get("kind")
+            if kind == "progress" or (
+                kind is None and "elapsed_secs" in obj and "total_requests" in obj
+            ):
+                last_progress = obj
+            elif kind == "summary" or (
+                kind is None and "totals" in obj and "scenarios" in obj
+            ):
+                last_summary = obj
+
+    if last_progress is None and last_summary is None:
+        return None if not saw_json else _raise_wrkr_json_error(stdout=stdout, stderr=stderr)
+
+    return _parse_wrkr_json_summary_obj(
+        progress=last_progress,
+        summary=last_summary,
+        stdout=stdout,
+        stderr=stderr,
+    )
+
+
+def _try_parse_json_object_line(line: str) -> dict[str, object] | None:
+    s = line.strip()
+    if not s or not s.startswith("{"):
+        return None
+    try:
+        v = json.loads(s)
+    except Exception:
+        return None
+    if not isinstance(v, dict):
+        return None
+    # Best-effort: assume string keys.
+    return v  # type: ignore[return-value]
+
+
+def _parse_wrkr_json_summary_obj(
+    *,
+    progress: dict[str, object] | None,
+    summary: dict[str, object] | None,
+    stdout: str,
+    stderr: str,
+) -> WrkrJsonSummary:
+    try:
+        # ---- Rates from progress ----
+        elapsed_secs: int
+        rps_avg: float
+        bytes_received_per_sec: int | None
+        bytes_sent_per_sec: int | None
+
+        if progress is None:
+            # We cannot compute RPS from summary alone (no rates there).
+            raise ParseError("wrkr json: missing progress line (kind=progress)")
+
+        elapsed_secs = _json_int(progress, "elapsed_secs")
+
+        # Prefer explicit average if present.
+        rps_avg_opt = _json_float(progress, "req_per_sec_avg", default=None)
+        if rps_avg_opt is not None:
+            rps_avg = rps_avg_opt
+        else:
+            # Derive from totals if we can, otherwise fall back to instantaneous rps.
+            total_requests_progress = _json_int(progress, "total_requests")
+            if elapsed_secs > 0:
+                rps_avg = float(total_requests_progress) / float(elapsed_secs)
+            else:
+                rps_avg = _json_float(progress, "requests_per_sec") or 0.0
+
+        bytes_received_per_sec = _json_int(progress, "bytes_received_per_sec")
+        bytes_sent_per_sec = _json_int(progress, "bytes_sent_per_sec")
+
+        # ---- Totals & percentiles: prefer final summary ----
+        total_requests: int
+        checks_failed_total: int
+        latency_mean_ms: float | None
+        latency_p50_ms: int | None
+        latency_p90_ms: int | None
+        latency_p99_ms: int | None
+        latency_max_ms: int | None
+
+        if summary is not None:
+            totals = _json_obj(summary, "totals")
+            total_requests = _json_int(totals, "requests_total")
+            checks_failed_total = _json_int(totals, "checks_failed_total")
+
+            # Best-effort: use the first scenario latency if present.
+            scenarios = _json_list(summary, "scenarios")
+            latency = None
+            if scenarios:
+                first = scenarios[0]
+                if isinstance(first, dict):
+                    lat = first.get("latency_ms")
+                    if isinstance(lat, dict):
+                        latency = lat
+
+            latency_mean_ms = _json_float(latency, "mean", default=None) if latency else None
+            latency_p50_ms = (
+                _ms_round_int(_json_float(latency, "p50", default=None))
+                if latency
+                else None
+            )
+            latency_p90_ms = (
+                _ms_round_int(_json_float(latency, "p90", default=None))
+                if latency
+                else None
+            )
+            latency_p99_ms = (
+                _ms_round_int(_json_float(latency, "p99", default=None))
+                if latency
+                else None
+            )
+            latency_max_ms = (
+                _ms_round_int(_json_float(latency, "max", default=None))
+                if latency
+                else None
+            )
+        else:
+            # Back-compat: derive totals from progress line.
+            total_requests = _json_int(progress, "total_requests")
+            checks_failed_total = _json_int(progress, "checks_failed_total")
+
+            latency_mean_ms = _json_float(progress, "latency_mean", default=None)
+            latency_p50_ms = _json_int(progress, "latency_p50")
+            latency_p90_ms = _json_int(progress, "latency_p90")
+            latency_p99_ms = _json_int(progress, "latency_p99")
+            latency_max_ms = _json_int(progress, "latency_max")
+    except ParseError as e:
+        diag = ParseDiagnostics(
+            kind="wrkr-json",
+            message=str(e),
+            stdout_tail=tail_lines(stdout, 12),
+            stderr_tail=tail_lines(stderr, 12),
+        )
+        raise ParseError(diag.format()) from e
+
+    if rps_avg < 0.0:
+        raise ParseError(f"wrkr json: rps must be non-negative, got {rps_avg!r}")
+
+    return WrkrJsonSummary(
+        elapsed_secs=elapsed_secs,
+        total_requests=total_requests,
+        rps=float(rps_avg),
+        checks_failed_total=checks_failed_total,
+        latency_mean_ms=None if latency_mean_ms is None else float(latency_mean_ms),
+        latency_p50_ms=latency_p50_ms,
+        latency_p90_ms=latency_p90_ms,
+        latency_p99_ms=latency_p99_ms,
+        latency_max_ms=latency_max_ms,
+        bytes_received_per_sec=bytes_received_per_sec,
+        bytes_sent_per_sec=bytes_sent_per_sec,
+    )
+
+
+def _raise_wrkr_json_error(*, stdout: str, stderr: str) -> None:
+    diag = ParseDiagnostics(
+        kind="wrkr-json",
+        message="failed to parse wrkr JSON progress lines (no progress objects found)",
+        stdout_tail=tail_lines(stdout, 12),
+        stderr_tail=tail_lines(stderr, 12),
+    )
+    raise ParseError(diag.format())
+
+
+def _json_int(obj: dict[str, object], key: str) -> int:
+    if key not in obj:
+        raise ParseError(f"wrkr json: missing key {key!r}")
+    v = obj[key]
+    if isinstance(v, bool):
+        raise ParseError(f"wrkr json: key {key!r} must be an int, got bool")
+    if isinstance(v, int):
+        return v
+    if isinstance(v, float) and v.is_integer():
+        return int(v)
+    raise ParseError(f"wrkr json: key {key!r} must be an int, got {type(v).__name__}")
+
+
+def _json_float(
+    obj: dict[str, object],
+    key: str,
+    *,
+    default: float | None = ...,
+) -> float | None:
+    if key not in obj:
+        if default is ...:
+            raise ParseError(f"wrkr json: missing key {key!r}")
+        return default
+    v = obj[key]
+    if isinstance(v, bool):
+        raise ParseError(f"wrkr json: key {key!r} must be a float, got bool")
+    if isinstance(v, (int, float)):
+        return float(v)
+    raise ParseError(f"wrkr json: key {key!r} must be a float, got {type(v).__name__}")
+
+
+def _json_obj(parent: dict[str, object], key: str) -> dict[str, object]:
+    if key not in parent:
+        raise ParseError(f"wrkr json: missing key {key!r}")
+    v = parent[key]
+    if not isinstance(v, dict):
+        raise ParseError(f"wrkr json: key {key!r} must be an object")
+    return v  # type: ignore[return-value]
+
+
+def _json_list(parent: dict[str, object], key: str) -> list[object]:
+    if key not in parent:
+        raise ParseError(f"wrkr json: missing key {key!r}")
+    v = parent[key]
+    if not isinstance(v, list):
+        raise ParseError(f"wrkr json: key {key!r} must be a list")
+    return v
+
+
+def _ms_round_int(v: float | None) -> int | None:
+    if v is None:
+        return None
+    if v < 0.0:
+        return None
+    return int(round(v))
 
 
 def parse_k6_http_rps(*, stdout: str, stderr: str) -> Rps:

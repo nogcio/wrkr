@@ -7,7 +7,11 @@ mod json;
 pub(crate) trait OutputFormatter: Send + Sync {
     fn print_header(&self, script_path: &Path, scenarios: &[wrkr_core::ScenarioConfig]);
     fn progress(&self) -> Option<wrkr_core::ProgressFn>;
-    fn print_summary(&self, summary: &wrkr_core::RunSummary) -> anyhow::Result<()>;
+    fn print_summary(
+        &self,
+        summary: &wrkr_core::RunSummary,
+        metrics: Option<&[wrkr_core::MetricSeriesSummary]>,
+    ) -> anyhow::Result<()>;
 }
 
 pub(crate) fn formatter(format: OutputFormat) -> Box<dyn OutputFormatter> {

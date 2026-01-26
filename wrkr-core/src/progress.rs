@@ -89,6 +89,8 @@ pub enum ScenarioProgress {
 pub struct ProgressUpdate {
     /// Monotonic tick counter (1-based) for progress emissions.
     pub tick: u64,
+    /// Duration since the previous progress emission.
+    pub interval: Duration,
     pub elapsed: Duration,
     pub scenario: String,
     pub exec: String,

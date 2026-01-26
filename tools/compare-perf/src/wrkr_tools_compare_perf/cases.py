@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
@@ -17,10 +18,55 @@ from .parse import (
     parse_k6_http_rps,
     parse_wrk_rps,
     parse_wrkr_rps,
+    try_parse_wrkr_json_summary,
 )
 from .report import format_grpc_summary_line, format_http_summary_line
 from .tool_detection import ToolPaths
 from .ui import RunUI
+
+
+def _format_wrkr_json_progress_line_for_ui(line: str) -> str | None:
+    s = line.strip()
+    if not s.startswith("{"):
+        return None
+    try:
+        obj = json.loads(s)
+    except Exception:
+        return None
+    if not isinstance(obj, dict):
+        return None
+
+    # Heuristic: only format wrkr NDJSON progress lines.
+    if obj.get("kind") not in {None, "progress"}:
+        return None
+    if "elapsed_secs" not in obj or "total_requests" not in obj:
+        return None
+
+    try:
+        t = int(obj.get("elapsed_secs"))
+        total = int(obj.get("total_requests"))
+        rps_avg = obj.get("req_per_sec_avg")
+        rps = float(rps_avg) if rps_avg is not None else float(obj.get("requests_per_sec"))
+
+        p99 = int(obj.get("latency_p99"))
+        mean = float(obj.get("latency_mean"))
+        failed = int(obj.get("checks_failed_total"))
+    except Exception:
+        return None
+
+    return f"wrkr: t={t:>3}s rps_avg={rps:>10.3f} p99={p99:>4}ms mean={mean:>7.3f}ms failed_checks={failed} total={total}"
+
+
+def _fmt_ms_i(v: int | None) -> str:
+    return "-" if v is None else f"{v}"
+
+
+def _fmt_ms_f(v: float | None) -> str:
+    return "-" if v is None else f"{v:.3f}"
+
+
+def _fmt_int(v: int | None) -> str:
+    return "-" if v is None else f"{v}"
 
 
 def _no_proxy_env_for_localhost() -> dict[str, str]:
@@ -218,6 +264,8 @@ def run_http_case(
         str(tools.wrkr),
         "run",
         scripts.wrkr,
+        "--output",
+        "json",
         "--duration",
         cfg.tuning.duration,
         "--vus",
@@ -231,7 +279,9 @@ def run_http_case(
             wrkr_argv,
             cwd=cfg.root,
             env=wrkr_env,
-            on_stdout_line=ui.tail,
+            on_stdout_line=lambda line: ui.tail(
+                _format_wrkr_json_progress_line_for_ui(line) or line
+            ),
             on_stderr_line=lambda line: ui.tail(line, style="dim"),
         )
 
@@ -277,12 +327,20 @@ def run_http_case(
         k6_ok = False
 
     wrkr_rps: Rps | None
+    wrkr_json = try_parse_wrkr_json_summary(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     try:
         wrkr_rps = parse_wrkr_rps(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     except ParseError as e:
         wrkr_rps = None
         wrkr_ok = False
         msg = f"FAIL: could not parse wrkr RPS ({e})"
+        ui.log(msg, style="red")
+        failure_messages.append(msg)
+        failures += 1
+
+    if wrkr_json is not None and wrkr_json.checks_failed_total > 0:
+        wrkr_ok = False
+        msg = f"FAIL: wrkr has failed checks (count={wrkr_json.checks_failed_total})"
         ui.log(msg, style="red")
         failure_messages.append(msg)
         failures += 1
@@ -352,6 +410,14 @@ def run_http_case(
         if wrkr_rps is not None
         else f"  wrkr: {'OK' if wrkr_ok else 'FAIL'} rps=-"
     )
+    if wrkr_json is not None:
+        summary_lines.append(
+            "  wrkr json: "
+            f"p50={_fmt_ms_i(wrkr_json.latency_p50_ms)}ms p90={_fmt_ms_i(wrkr_json.latency_p90_ms)}ms "
+            f"p99={_fmt_ms_i(wrkr_json.latency_p99_ms)}ms max={_fmt_ms_i(wrkr_json.latency_max_ms)}ms "
+            f"mean={_fmt_ms_f(wrkr_json.latency_mean_ms)}ms failed_checks={wrkr_json.checks_failed_total} "
+            f"rx/s={_fmt_int(wrkr_json.bytes_received_per_sec)} tx/s={_fmt_int(wrkr_json.bytes_sent_per_sec)}"
+        )
     if tools.k6 is None:
         summary_lines.append("  k6  : SKIP")
     else:
@@ -441,6 +507,8 @@ def run_grpc_case(
         str(tools.wrkr),
         "run",
         scripts.wrkr,
+        "--output",
+        "json",
         "--duration",
         cfg.tuning.duration,
         "--vus",
@@ -454,7 +522,9 @@ def run_grpc_case(
             wrkr_argv,
             cwd=cfg.root,
             env=wrkr_env,
-            on_stdout_line=ui.tail,
+            on_stdout_line=lambda line: ui.tail(
+                _format_wrkr_json_progress_line_for_ui(line) or line
+            ),
             on_stderr_line=lambda line: ui.tail(line, style="dim"),
         )
 
@@ -467,12 +537,20 @@ def run_grpc_case(
         failures += 1
 
     wrkr_rps: Rps | None
+    wrkr_json = try_parse_wrkr_json_summary(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     try:
         wrkr_rps = parse_wrkr_rps(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     except ParseError as e:
         wrkr_rps = None
         wrkr_ok = False
         msg = f"FAIL: could not parse wrkr RPS ({e})"
+        ui.log(msg, style="red")
+        failure_messages.append(msg)
+        failures += 1
+
+    if wrkr_json is not None and wrkr_json.checks_failed_total > 0:
+        wrkr_ok = False
+        msg = f"FAIL: wrkr has failed checks (count={wrkr_json.checks_failed_total})"
         ui.log(msg, style="red")
         failure_messages.append(msg)
         failures += 1
@@ -556,6 +634,14 @@ def run_grpc_case(
         if wrkr_rps is not None
         else f"  wrkr: {'OK' if wrkr_ok else 'FAIL'} rps=-"
     )
+    if wrkr_json is not None:
+        summary_lines.append(
+            "  wrkr json: "
+            f"p50={_fmt_ms_i(wrkr_json.latency_p50_ms)}ms p90={_fmt_ms_i(wrkr_json.latency_p90_ms)}ms "
+            f"p99={_fmt_ms_i(wrkr_json.latency_p99_ms)}ms max={_fmt_ms_i(wrkr_json.latency_max_ms)}ms "
+            f"mean={_fmt_ms_f(wrkr_json.latency_mean_ms)}ms failed_checks={wrkr_json.checks_failed_total} "
+            f"rx/s={_fmt_int(wrkr_json.bytes_received_per_sec)} tx/s={_fmt_int(wrkr_json.bytes_sent_per_sec)}"
+        )
     if tools.k6 is None:
         summary_lines.append("  k6  : SKIP")
     else:

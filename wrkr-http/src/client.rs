@@ -5,6 +5,7 @@ use hyper::body::Incoming;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use std::time::Duration;
 
 use super::estimate::{estimate_http_request_bytes_parts, estimate_http1_response_head_bytes};
 use super::util::{has_header, host_header_value};
@@ -17,16 +18,26 @@ pub struct HttpClient {
 
 impl Default for HttpClient {
     fn default() -> Self {
+        // The OS-level TCP connect timeout can be very long (tens of seconds), which can cause
+        // short runs to appear “hung” when the target host is unreachable.
+        //
+        // We apply a sane default so failed connects surface promptly.
+        Self::new(Some(Duration::from_secs(3)))
+    }
+}
+
+impl HttpClient {
+    #[must_use]
+    pub fn new(connect_timeout: Option<Duration>) -> Self {
         let mut connector = HttpConnector::new();
         connector.enforce_http(false);
+        connector.set_connect_timeout(connect_timeout);
 
         let inner = Client::builder(TokioExecutor::new()).build(connector);
 
         Self { inner }
     }
-}
 
-impl HttpClient {
     pub async fn request(&self, req: HttpRequest) -> Result<HttpResponse> {
         let timeout = req.timeout;
         let parsed = url::Url::parse(&req.url).map_err(|_| Error::InvalidUrl(req.url.clone()))?;
@@ -93,5 +104,30 @@ impl HttpClient {
 
     pub async fn get(&self, url: &str) -> Result<HttpResponse> {
         self.request(HttpRequest::get(url)).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::*;
+    use std::time::Instant;
+
+    #[tokio::test]
+    async fn unreachable_host_fails_fast_with_connect_timeout() {
+        // Use a small timeout to keep the test fast and deterministic.
+        let client = HttpClient::new(Some(Duration::from_millis(200)));
+        let req = HttpRequest::get("http://192.0.2.1:81/");
+
+        let started = Instant::now();
+        let _err = client.request(req).await.unwrap_err();
+        let elapsed = started.elapsed();
+
+        // Assert we didn't block for an OS-level TCP connect timeout.
+        assert!(
+            elapsed < Duration::from_secs(2),
+            "expected fast failure, elapsed={elapsed:?}"
+        );
     }
 }

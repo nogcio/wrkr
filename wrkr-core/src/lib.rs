@@ -28,3 +28,4 @@ pub use schedule::{RampingU64Schedule, StageSnapshot};
 pub use summary::*;
 pub use thresholds::*;
 pub use vu::*;
+pub use wrkr_metrics::{MetricKind, MetricSeriesSummary, MetricValue};
