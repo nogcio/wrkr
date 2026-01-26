@@ -195,3 +195,142 @@ fn decode_scalar(
 ) -> std::result::Result<wrkr_value::Value, String> {
     decode_scalar_value(kind, wire_type, src)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use bytes::BufMut as _;
+    use std::sync::Arc;
+
+    #[test]
+    fn merge_decoded_field_list_merges_into_existing_shapes() {
+        let name = Arc::<str>::from("xs");
+        let shape = GrpcFieldShape::List {
+            kind: GrpcValueKind::Int64,
+        };
+
+        // None + Array => Array
+        let mut out = wrkr_value::ObjectMap::new();
+        assert!(
+            merge_decoded_field(
+                &mut out,
+                &name,
+                &shape,
+                wrkr_value::Value::Array(vec![wrkr_value::Value::I64(1)])
+            )
+            .is_ok()
+        );
+
+        let Some(wrkr_value::Value::Array(a)) = out.get(&name) else {
+            panic!("expected array");
+        };
+        assert_eq!(a.len(), 1);
+
+        // Array + scalar => push
+        assert!(merge_decoded_field(&mut out, &name, &shape, wrkr_value::Value::I64(2)).is_ok());
+        let Some(wrkr_value::Value::Array(a)) = out.get(&name) else {
+            panic!("expected array");
+        };
+        assert_eq!(a.len(), 2);
+    }
+
+    #[test]
+    fn merge_decoded_field_list_promotes_existing_scalar_to_array() {
+        let name = Arc::<str>::from("xs");
+        let shape = GrpcFieldShape::List {
+            kind: GrpcValueKind::Int64,
+        };
+
+        let mut out = wrkr_value::ObjectMap::new();
+        out.insert(name.clone(), wrkr_value::Value::I64(10));
+
+        assert!(
+            merge_decoded_field(
+                &mut out,
+                &name,
+                &shape,
+                wrkr_value::Value::Array(vec![
+                    wrkr_value::Value::I64(11),
+                    wrkr_value::Value::I64(12)
+                ])
+            )
+            .is_ok()
+        );
+
+        let Some(wrkr_value::Value::Array(a)) = out.get(&name) else {
+            panic!("expected array");
+        };
+        assert_eq!(a.len(), 3);
+    }
+
+    #[test]
+    fn merge_decoded_field_map_handles_replace_and_error_cases() {
+        let name = Arc::<str>::from("m");
+        let shape = GrpcFieldShape::Map {
+            key_kind: prost_reflect::Kind::String,
+            value_kind: GrpcValueKind::Int64,
+        };
+
+        let mut out = wrkr_value::ObjectMap::new();
+        // Error when decoded value isn't a map.
+        assert!(merge_decoded_field(&mut out, &name, &shape, wrkr_value::Value::I64(1)).is_err());
+
+        // Replace existing non-map.
+        out.insert(name.clone(), wrkr_value::Value::Bool(true));
+        let mut new_map = wrkr_value::MapMap::new();
+        new_map.insert(
+            wrkr_value::MapKey::String(Arc::<str>::from("k")),
+            wrkr_value::Value::I64(7),
+        );
+        assert!(
+            merge_decoded_field(&mut out, &name, &shape, wrkr_value::Value::Map(new_map)).is_ok()
+        );
+        let Some(wrkr_value::Value::Map(m)) = out.get(&name) else {
+            panic!("expected map");
+        };
+        assert_eq!(m.len(), 1);
+    }
+
+    #[test]
+    fn decode_list_handles_packed_and_non_packed_repeated_scalars() {
+        // Packed int64 list: [1, 2]
+        let mut src = bytes::BytesMut::new();
+        // len = 2, payload = 0x01 0x02
+        src.put_u8(2);
+        src.put_u8(1);
+        src.put_u8(2);
+        let mut src = src.freeze();
+
+        let Ok(got) = decode_list(&GrpcValueKind::Int64, WireType::Len, &mut src) else {
+            panic!("expected packed list decode");
+        };
+        let wrkr_value::Value::Array(items) = got else {
+            panic!("expected array");
+        };
+        assert_eq!(
+            items,
+            vec![wrkr_value::Value::I64(1), wrkr_value::Value::I64(2)]
+        );
+
+        // Non-packable kind with Len wire: string list should decode as single element array.
+        let mut src = bytes::Bytes::from_static(b"\x02hi");
+        let Ok(got) = decode_list(&GrpcValueKind::String, WireType::Len, &mut src) else {
+            panic!("expected non-packed list decode");
+        };
+        let wrkr_value::Value::Array(items) = got else {
+            panic!("expected array");
+        };
+        assert_eq!(items.len(), 1);
+
+        // Non-packed varint list: int64 wire varint.
+        let mut src = bytes::Bytes::from_static(b"\x05");
+        let Ok(got) = decode_list(&GrpcValueKind::Int64, WireType::Varint, &mut src) else {
+            panic!("expected scalar list decode");
+        };
+        let wrkr_value::Value::Array(items) = got else {
+            panic!("expected array");
+        };
+        assert_eq!(items, vec![wrkr_value::Value::I64(5)]);
+    }
+}

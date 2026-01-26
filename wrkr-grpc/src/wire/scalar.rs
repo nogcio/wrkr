@@ -251,3 +251,216 @@ pub(super) fn encode_scalar_field(
 fn write_len_delimited(bytes: bytes::Bytes, out: &mut bytes::BytesMut) {
     super::primitives::write_len_delimited(bytes, out);
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn build_test_enum() -> prost_reflect::EnumDescriptor {
+        use prost_reflect::DescriptorPool;
+        use prost_types::{
+            EnumDescriptorProto, EnumValueDescriptorProto, FileDescriptorProto, FileDescriptorSet,
+        };
+
+        let en = EnumDescriptorProto {
+            name: Some("E".to_string()),
+            value: vec![
+                EnumValueDescriptorProto {
+                    name: Some("ZERO".to_string()),
+                    number: Some(0),
+                    ..Default::default()
+                },
+                EnumValueDescriptorProto {
+                    name: Some("ONE".to_string()),
+                    number: Some(1),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        };
+
+        let file = FileDescriptorProto {
+            name: Some("test.proto".to_string()),
+            package: Some("test".to_string()),
+            enum_type: vec![en],
+            syntax: Some("proto3".to_string()),
+            ..Default::default()
+        };
+
+        let fds = FileDescriptorSet { file: vec![file] };
+        let Ok(pool) = DescriptorPool::from_file_descriptor_set(fds) else {
+            panic!("failed to build enum descriptor pool");
+        };
+
+        let Some(desc) = pool.get_enum_by_name("test.E") else {
+            panic!("enum not found");
+        };
+        desc
+    }
+
+    #[test]
+    fn decode_scalar_value_bool_success_and_wire_type_errors() {
+        // Success
+        let mut src = bytes::Bytes::from_static(b"\x01");
+        let Ok(v) = decode_scalar_value(&GrpcValueKind::Bool, WireType::Varint, &mut src) else {
+            panic!("expected bool decode");
+        };
+        assert_eq!(v, wrkr_value::Value::Bool(true));
+
+        // Wire type error
+        let mut src = bytes::Bytes::new();
+        assert!(decode_scalar_value(&GrpcValueKind::Bool, WireType::Len, &mut src).is_err());
+    }
+
+    #[test]
+    fn decode_scalar_value_rejects_wrong_wire_types_for_numeric_kinds() {
+        let mut src = bytes::Bytes::new();
+        assert!(decode_scalar_value(&GrpcValueKind::Int64, WireType::Len, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Uint64, WireType::Len, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Sint64, WireType::Len, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Fixed32, WireType::Varint, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Fixed64, WireType::Varint, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Float, WireType::Varint, &mut src).is_err());
+        assert!(decode_scalar_value(&GrpcValueKind::Double, WireType::Varint, &mut src).is_err());
+    }
+
+    #[test]
+    fn decode_scalar_value_fixed_and_float_success_paths() {
+        // fixed32 = 10
+        let mut src = bytes::Bytes::from_static(b"\x0a\x00\x00\x00");
+        let Ok(v) = decode_scalar_value(&GrpcValueKind::Fixed32, WireType::ThirtyTwoBit, &mut src)
+        else {
+            panic!("expected fixed32 decode");
+        };
+        assert_eq!(v, wrkr_value::Value::U64(10));
+
+        // sfixed32 = -7
+        let sfixed32 = (-7_i32).to_le_bytes();
+        let mut src = bytes::Bytes::copy_from_slice(&sfixed32);
+        let Ok(v) = decode_scalar_value(&GrpcValueKind::Sfixed32, WireType::ThirtyTwoBit, &mut src)
+        else {
+            panic!("expected sfixed32 decode");
+        };
+        assert_eq!(v, wrkr_value::Value::I64(-7));
+
+        // float = 1.5
+        let float_bits = (1.5_f32).to_bits().to_le_bytes();
+        let mut src = bytes::Bytes::copy_from_slice(&float_bits);
+        let Ok(v) = decode_scalar_value(&GrpcValueKind::Float, WireType::ThirtyTwoBit, &mut src)
+        else {
+            panic!("expected float decode");
+        };
+        let wrkr_value::Value::F64(f) = v else {
+            panic!("expected f64");
+        };
+        assert!((f - 1.5).abs() < 1e-9);
+
+        // double = 1.25
+        let double_bits = (1.25_f64).to_bits().to_le_bytes();
+        let mut src = bytes::Bytes::copy_from_slice(&double_bits);
+        let Ok(v) = decode_scalar_value(&GrpcValueKind::Double, WireType::SixtyFourBit, &mut src)
+        else {
+            panic!("expected double decode");
+        };
+        assert_eq!(v, wrkr_value::Value::F64(1.25));
+    }
+
+    #[test]
+    fn decode_and_encode_enum_scalar() {
+        let enum_desc = build_test_enum();
+        let kind = GrpcValueKind::Enum(enum_desc.clone());
+
+        // Decode known enum value.
+        let mut src = bytes::Bytes::from_static(b"\x01");
+        let Ok(v) = decode_scalar_value(&kind, WireType::Varint, &mut src) else {
+            panic!("expected enum decode");
+        };
+        assert_eq!(v, wrkr_value::Value::String(Arc::<str>::from("ONE")));
+
+        // Decode unknown enum numeric.
+        let mut src = bytes::Bytes::from_static(b"\x09");
+        let Ok(v) = decode_scalar_value(&kind, WireType::Varint, &mut src) else {
+            panic!("expected enum decode");
+        };
+        assert_eq!(v, wrkr_value::Value::I64(9));
+
+        // Encode from string name.
+        let mut out = bytes::BytesMut::new();
+        assert!(
+            encode_scalar_field(
+                1,
+                &kind,
+                &wrkr_value::Value::String(Arc::<str>::from("ONE")),
+                &mut out
+            )
+            .is_ok()
+        );
+        let mut bytes = out.freeze();
+        let Ok(tag) = read_variant(&mut bytes) else {
+            panic!("expected tag");
+        };
+        assert_eq!(tag, 1_u64 << 3);
+        let Ok(n) = read_variant(&mut bytes) else {
+            panic!("expected enum number");
+        };
+        assert_eq!(n, 1);
+
+        // Encode unknown string name defaults to 0.
+        let mut out = bytes::BytesMut::new();
+        assert!(
+            encode_scalar_field(
+                1,
+                &kind,
+                &wrkr_value::Value::String(Arc::<str>::from("NOPE")),
+                &mut out
+            )
+            .is_ok()
+        );
+        let mut bytes = out.freeze();
+        let Ok(_tag) = read_variant(&mut bytes) else {
+            panic!("expected tag");
+        };
+        let Ok(n) = read_variant(&mut bytes) else {
+            panic!("expected enum number");
+        };
+        assert_eq!(n, 0);
+    }
+
+    #[test]
+    fn encode_scalar_field_float_and_double_write_expected_bits() {
+        let mut out = bytes::BytesMut::new();
+        assert!(
+            encode_scalar_field(
+                1,
+                &GrpcValueKind::Float,
+                &wrkr_value::Value::F64(1.5),
+                &mut out
+            )
+            .is_ok()
+        );
+        let mut bytes = out.freeze();
+        let Ok(_tag) = read_variant(&mut bytes) else {
+            panic!("expected tag");
+        };
+        let bits = bytes.get_u32_le();
+        assert_eq!(bits, (1.5_f32).to_bits());
+
+        let mut out = bytes::BytesMut::new();
+        assert!(
+            encode_scalar_field(
+                1,
+                &GrpcValueKind::Double,
+                &wrkr_value::Value::F64(1.25),
+                &mut out
+            )
+            .is_ok()
+        );
+        let mut bytes = out.freeze();
+        let Ok(_tag) = read_variant(&mut bytes) else {
+            panic!("expected tag");
+        };
+        let bits = bytes.get_u64_le();
+        assert_eq!(bits, (1.25_f64).to_bits());
+    }
+}

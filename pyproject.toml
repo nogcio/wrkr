@@ -31,6 +31,9 @@ wrkr-tools-compare-perf = "wrkr_tools_compare_perf.__main__:main"
 # CPU profiling helper. Implementation: `tools/profile/src/`.
 wrkr-tools-profile = "wrkr_tools_profile.__main__:main"
 
+# Coverage helper (Rust llvm-cov lcov parsing). Implementation: `tools/coverage/src/`.
+wrkr-tools-coverage = "wrkr_tools_coverage.__main__:main"
+
 [build-system]
 requires = ["hatchling>=1.24"]
 build-backend = "hatchling.build"
@@ -43,6 +46,7 @@ packages = [
   "tools/lib/wrkr_tools_common",
   "tools/compare-perf/src/wrkr_tools_compare_perf",
   "tools/profile/src/wrkr_tools_profile",
+  "tools/coverage/src/wrkr_tools_coverage",
 ]
 
 [tool.ruff]
@@ -80,5 +84,6 @@ testpaths = [
   "tools/compare-perf/tests",
   "tools/profile/tests",
   "tools/lib/tests",
+  "tools/coverage/tests",
 ]
 addopts = "-q"

@@ -16,39 +16,54 @@ local vu = require("wrkr/vu")
 local Pool = require("lib.pool")
 local gen = require("lib.synthetic_analytics")
 local gchecks = require("lib.grpc_checks")
+local ex = require("lib.example")
 
-local target = env.GRPC_TARGET
-if target == nil then
-  error("GRPC_TARGET is required")
-end
+local base = ex.base_url()
 
 local client = grpc.Client.new()
 client:load({ "protos" }, "protos/analytics.proto")
 
 local connected = false
 
+local function ensure_connected()
+  if connected then
+    return
+  end
+
+  local ok, err = client:connect(base, { timeout = "2s" })
+  if not ok then
+    error(err)
+  end
+
+  connected = true
+end
+
 local pool = Pool.new({
   size = 50,
   generate = function()
-    return gen.generate_aggregate_case()
+    local data = gen.generate_aggregate_case()
+
+    local req_bytes, enc_err = client:encode(
+      "AnalyticsService/AggregateOrders",
+      { orders = data.orders }
+    )
+    if req_bytes == nil then
+      error("failed to encode AnalyticsRequest: " .. tostring(enc_err))
+    end
+
+    data.req_bytes = req_bytes
+    return data
   end,
 })
 
 function Default()
-  if not connected then
-    local ok, err = client:connect(target, { timeout = "2s" })
-    if not ok then
-      error(err)
-    end
-    connected = true
-  end
-
+  ensure_connected()
   pool:ensure_initialized(vu.id())
   local data = pool:next()
 
   local res = client:invoke(
     "AnalyticsService/AggregateOrders",
-    { orders = data.orders },
+    data.req_bytes,
     {
       name = "gRPC AggregateOrders",
       timeout = "10s",

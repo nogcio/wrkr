@@ -208,3 +208,135 @@ fn encode_map_key(
         other => Err(format!("unsupported map key type for proto kind {other:?}")),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    #[test]
+    fn decode_map_entry_into_object_rejects_non_len_wire_type() {
+        let mut out = wrkr_value::ObjectMap::new();
+        let name = Arc::<str>::from("m");
+        let mut src = bytes::Bytes::new();
+
+        let got = decode_map_entry_into_object(
+            &mut out,
+            &name,
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            WireType::Varint,
+            &mut src,
+        );
+
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn decode_map_entry_errors_on_tag_zero() {
+        let got = decode_map_entry(
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            bytes::Bytes::from_static(b"\x00"),
+        );
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn decode_map_entry_errors_on_missing_key_or_value() {
+        // Missing key (only field 2 = value).
+        let got = decode_map_entry(
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            bytes::Bytes::from_static(b"\x10\x01"),
+        );
+        assert!(got.is_err());
+
+        // Missing value (only field 1 = key).
+        let got = decode_map_entry(
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            bytes::Bytes::from_static(b"\x0a\x01a"),
+        );
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn decode_map_key_validates_wire_type_and_utf8() {
+        // Wrong wire type for string key.
+        let got = decode_map_entry(
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            bytes::Bytes::from_static(b"\x08\x01\x10\x02"),
+        );
+        assert!(got.is_err());
+
+        // Invalid UTF-8 map key.
+        let mut entry = bytes::BytesMut::new();
+        // field 1 (key, len)
+        write_tag(1, WireType::Len, &mut entry);
+        write_len_delimited(bytes::Bytes::from_static(b"\xff"), &mut entry);
+        // field 2 (value, varint)
+        write_tag(2, WireType::Varint, &mut entry);
+        write_variant(1, &mut entry);
+
+        let got = decode_map_entry(
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            entry.freeze(),
+        );
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn encode_map_key_rejects_mismatched_mapkey_variant() {
+        let mut out = bytes::BytesMut::new();
+        let got = encode_map_key(
+            &prost_reflect::Kind::String,
+            wrkr_value::MapKey::Bool(true),
+            &mut out,
+        );
+        assert!(got.is_err());
+
+        let got = encode_map_key(
+            &prost_reflect::Kind::Bool,
+            wrkr_value::MapKey::String(Arc::<str>::from("nope")),
+            &mut out,
+        );
+        assert!(got.is_err());
+    }
+
+    #[test]
+    fn decode_map_entry_into_object_overwrites_non_map_existing_value() {
+        let mut out = wrkr_value::ObjectMap::new();
+        let name = Arc::<str>::from("m");
+        out.insert(name.clone(), wrkr_value::Value::I64(123));
+
+        let mut entry = bytes::BytesMut::new();
+        // field 1 (key, len)
+        write_tag(1, WireType::Len, &mut entry);
+        write_len_delimited(bytes::Bytes::from_static(b"k"), &mut entry);
+        // field 2 (value, varint)
+        write_tag(2, WireType::Varint, &mut entry);
+        write_variant(7, &mut entry);
+
+        let mut src = bytes::BytesMut::new();
+        write_len_delimited(entry.freeze(), &mut src);
+        let mut src = src.freeze();
+
+        let got = decode_map_entry_into_object(
+            &mut out,
+            &name,
+            &prost_reflect::Kind::String,
+            &GrpcValueKind::Int64,
+            WireType::Len,
+            &mut src,
+        );
+
+        assert!(got.is_ok());
+        let Some(wrkr_value::Value::Map(m)) = out.get(&name) else {
+            panic!("expected map");
+        };
+        assert_eq!(m.len(), 1);
+    }
+}

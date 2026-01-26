@@ -186,3 +186,97 @@ impl MetricHandle {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn summarize_histogram_empty_has_no_stats() {
+        let h = new_default_histogram();
+        let s = summarize_histogram(&h);
+        assert_eq!(s.count, 0);
+        assert!(s.p50.is_none());
+        assert!(s.min.is_none());
+        assert!(s.max.is_none());
+        assert!(s.mean.is_none());
+        assert!(s.stdev.is_none());
+    }
+
+    #[test]
+    fn summarize_histogram_non_empty_has_stats() {
+        let mut h = new_default_histogram();
+        let _ = h.record(10);
+        let _ = h.record(20);
+        let _ = h.record(30);
+
+        let s = summarize_histogram(&h);
+        assert_eq!(s.count, 3);
+        assert_eq!(s.min, Some(10.0));
+        assert_eq!(s.max, Some(30.0));
+        assert!(s.p50.is_some());
+        assert!(s.p95.is_some());
+        assert!(s.mean.is_some());
+        assert!(s.stdev.is_some());
+    }
+
+    #[test]
+    fn metric_storage_new_initializes_defaults() {
+        match MetricStorage::new(MetricKind::Counter) {
+            MetricStorage::Counter(c) => assert_eq!(c.load(Ordering::Relaxed), 0),
+            _ => panic!("expected counter"),
+        }
+
+        match MetricStorage::new(MetricKind::Gauge) {
+            MetricStorage::Gauge(g) => assert_eq!(g.load(Ordering::Relaxed), 0),
+            _ => panic!("expected gauge"),
+        }
+
+        match MetricStorage::new(MetricKind::Rate) {
+            MetricStorage::Rate(r) => {
+                assert_eq!(r.total.load(Ordering::Relaxed), 0);
+                assert_eq!(r.hits.load(Ordering::Relaxed), 0);
+            }
+            _ => panic!("expected rate"),
+        }
+
+        match MetricStorage::new(MetricKind::Histogram) {
+            MetricStorage::Histogram(h) => assert_eq!(h.lock().len(), 0),
+            _ => panic!("expected histogram"),
+        }
+    }
+
+    #[test]
+    fn metric_handle_counter_gauge_and_rate_update() {
+        let c = MetricHandle::Counter(Arc::new(AtomicU64::new(0)));
+        c.increment(2);
+        c.increment(3);
+        assert_eq!(c.get_counter(), 5);
+
+        let g = MetricHandle::Gauge(Arc::new(AtomicI64::new(0)));
+        g.set_gauge(10);
+        g.increment_gauge(5);
+        g.decrement_gauge(3);
+        assert_eq!(g.get_gauge(), 12);
+
+        let r = MetricHandle::Rate(Arc::new(Rate {
+            total: AtomicU64::new(0),
+            hits: AtomicU64::new(0),
+        }));
+        r.add_rate(2, 10);
+        r.add_rate(3, 20);
+        assert_eq!(r.get_rate(), (30, 5));
+    }
+
+    #[test]
+    fn metric_handle_histogram_observes_values() {
+        let h = MetricHandle::Histogram(Arc::new(Mutex::new(new_default_histogram())));
+        h.observe_histogram(10);
+        h.observe_histogram(20);
+
+        let MetricHandle::Histogram(inner) = h else {
+            panic!("expected histogram handle");
+        };
+        assert_eq!(inner.lock().len(), 2);
+    }
+}
