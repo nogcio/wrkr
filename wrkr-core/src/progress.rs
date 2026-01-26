@@ -33,23 +33,23 @@ pub struct LiveMetrics {
     pub req_per_sec_max: f64,
     pub req_per_sec_stdev_pct: f64,
 
-    /// Aggregate latency stats (milliseconds) across the whole run so far.
-    pub latency_mean_ms: f64,
-    pub latency_stdev_ms: f64,
-    pub latency_max_ms: u64,
-    pub latency_p50_ms: u64,
-    pub latency_p75_ms: u64,
-    pub latency_p90_ms: u64,
-    pub latency_p99_ms: u64,
+    /// Aggregate latency stats (microseconds) across the whole run so far.
+    pub latency_mean: f64,
+    pub latency_stdev: f64,
+    pub latency_max: u64,
+    pub latency_p50: u64,
+    pub latency_p75: u64,
+    pub latency_p90: u64,
+    pub latency_p99: u64,
     pub latency_stdev_pct: f64,
 
-    /// Percentiles 1..=99, values in milliseconds.
-    pub latency_distribution_ms: Vec<(u8, u64)>,
+    /// Percentiles 1..=99, values in microseconds.
+    pub latency_distribution: Vec<(u8, u64)>,
 
     /// Failed checks breakdown by name.
     pub checks_failed: HashMap<String, u64>,
-    pub latency_p50_ms_now: Option<f64>,
-    pub latency_p95_ms_now: Option<f64>,
+    pub latency_p50_now: Option<f64>,
+    pub latency_p95_now: Option<f64>,
     pub iterations_total: u64,
 }
 

@@ -16,8 +16,8 @@ pub struct RequestMetricIds {
     pub bytes_sent_total: MetricId,
     pub errors_total: MetricId,
     pub errors_by_kind_total: MetricId,
-    /// Request latency in milliseconds.
-    pub latency_ms: MetricId,
+    /// Request latency in microseconds.
+    pub latency: MetricId,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -41,7 +41,7 @@ impl RequestMetricIds {
             errors_total: metrics.register("request_errors_total", MetricKind::Counter),
             errors_by_kind_total: metrics
                 .register("request_errors_by_kind_total", MetricKind::Counter),
-            latency_ms: metrics.register("request_latency_ms", MetricKind::Histogram),
+            latency: metrics.register("request_latency", MetricKind::Histogram),
         }
     }
 
@@ -114,22 +114,21 @@ impl RequestMetricIds {
         }
 
         // Latency histogram (two series: overall + protocol-scoped)
-        let latency_ms: u64 = sample.latency.as_millis().try_into().unwrap_or(u64::MAX);
+        let latency: u64 = sample.latency.as_micros().try_into().unwrap_or(u64::MAX);
 
         let overall_tags = resolve(&[("scenario", sample.scenario)]);
-        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency_ms, overall_tags)
-        {
+        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency, overall_tags) {
             let mut h = h.lock();
-            let _ = h.record(latency_ms.max(1));
+            let _ = h.record(latency.max(1));
         }
 
         let tags = resolve(&[
             ("scenario", sample.scenario),
             ("protocol", protocol_str.as_str()),
         ]);
-        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency_ms, tags) {
+        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.latency, tags) {
             let mut h = h.lock();
-            let _ = h.record(latency_ms.max(1));
+            let _ = h.record(latency.max(1));
         }
     }
 }

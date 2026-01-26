@@ -77,6 +77,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - CLI overrides for runs: `--vus`, `--duration`, `--iterations`, `--env KEY=VALUE`, `--output`.
 - Output formats: human summary and JSON progress lines (NDJSON).
 - Built-in Lua modules: `wrkr/http`, `wrkr/check`, `wrkr/env`, `wrkr/json`, `wrkr/vu`, `wrkr/shared`, `wrkr/fs` (+ aggregate `wrkr`).
-- `wrkr init` to scaffold a script workspace with `.luarc.json` and LuaLS stubs.
+- `wrkr init --lang lua` to scaffold a script workspace with `.luarc.json` and LuaLS stubs.
 - Example scripts under `examples/` (HTTP, JSON aggregation, gRPC aggregation, lifecycle hooks).
 - Distribution: GitHub Release binaries, Docker image on release tags, and Homebrew formula.

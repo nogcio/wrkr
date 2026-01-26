@@ -253,7 +253,7 @@ mod tests {
     #[test]
     fn fold_histogram_summary_merges_series() {
         let reg = Registry::default();
-        let m = reg.register("request_latency_ms", MetricKind::Histogram);
+        let m = reg.register("request_latency", MetricKind::Histogram);
 
         let scenario_key = reg.resolve_key("scenario");
         let a = reg.resolve_key("A");

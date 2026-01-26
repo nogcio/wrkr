@@ -5,8 +5,7 @@ use wrkr_metrics::{MetricHandle, MetricId, MetricKind, Registry};
 #[derive(Debug, Clone, Copy)]
 pub struct IterationMetricIds {
     pub iterations_total: MetricId,
-    /// Iteration duration in microseconds.
-    pub iteration_duration_seconds: MetricId,
+    pub iteration_duration: MetricId,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -20,8 +19,7 @@ impl IterationMetricIds {
     pub fn register(metrics: &Registry) -> Self {
         Self {
             iterations_total: metrics.register("iterations_total", MetricKind::Counter),
-            iteration_duration_seconds: metrics
-                .register("iteration_duration_seconds", MetricKind::Histogram),
+            iteration_duration: metrics.register("iteration_duration", MetricKind::Histogram),
         }
     }
 
@@ -54,8 +52,7 @@ impl IterationMetricIds {
             c.fetch_add(1, Ordering::Relaxed);
         }
 
-        if let Some(MetricHandle::Histogram(h)) =
-            metrics.get_handle(self.iteration_duration_seconds, tags)
+        if let Some(MetricHandle::Histogram(h)) = metrics.get_handle(self.iteration_duration, tags)
         {
             let duration_us: u64 = sample.duration.as_micros().try_into().unwrap_or(u64::MAX);
             let _ = h.lock().record(duration_us.max(1));

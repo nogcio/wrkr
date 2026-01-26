@@ -18,5 +18,5 @@ pub struct ScenarioSummary {
     pub checks_failed_total: u64,
     pub checks_failed: HashMap<String, u64>,
 
-    pub latency_ms: Option<wrkr_metrics::HistogramSummary>,
+    pub latency: Option<wrkr_metrics::HistogramSummary>,
 }

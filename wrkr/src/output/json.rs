@@ -81,13 +81,13 @@ fn build_progress_line(u: &wrkr_core::ProgressUpdate) -> JsonProgressLine {
         total_bytes_sent: u.metrics.bytes_sent_total,
         checks_failed_total: u.metrics.checks_failed_total,
 
-        latency_mean: u.metrics.latency_mean_ms,
-        latency_stdev: u.metrics.latency_stdev_ms,
-        latency_max: u.metrics.latency_max_ms,
-        latency_p50: u.metrics.latency_p50_ms,
-        latency_p75: u.metrics.latency_p75_ms,
-        latency_p90: u.metrics.latency_p90_ms,
-        latency_p99: u.metrics.latency_p99_ms,
+        latency_mean: u.metrics.latency_mean,
+        latency_stdev: u.metrics.latency_stdev,
+        latency_max: u.metrics.latency_max,
+        latency_p50: u.metrics.latency_p50,
+        latency_p75: u.metrics.latency_p75,
+        latency_p90: u.metrics.latency_p90,
+        latency_p99: u.metrics.latency_p99,
         latency_stdev_pct: u.metrics.latency_stdev_pct,
 
         checks_failed: u.metrics.checks_failed.clone(),
@@ -119,7 +119,7 @@ pub(crate) struct JsonScenarioSummary {
     pub checks_failed_total: u64,
     pub checks_failed: BTreeMap<String, u64>,
 
-    pub latency_ms: Option<JsonLatencySummary>,
+    pub latency: Option<JsonLatencySummary>,
 }
 
 #[derive(Debug, Serialize)]
@@ -171,7 +171,7 @@ fn build_summary_line(summary: &wrkr_core::RunSummary) -> JsonSummaryLine {
                 .map(|(k, v)| (k.clone(), *v))
                 .collect::<BTreeMap<_, _>>();
 
-            let latency_ms = s.latency_ms.as_ref().map(|l| JsonLatencySummary {
+            let latency = s.latency.as_ref().map(|l| JsonLatencySummary {
                 p50: l.p50,
                 p75: l.p75,
                 p90: l.p90,
@@ -193,7 +193,7 @@ fn build_summary_line(summary: &wrkr_core::RunSummary) -> JsonSummaryLine {
                 iterations_total: s.iterations_total,
                 checks_failed_total: s.checks_failed_total,
                 checks_failed,
-                latency_ms,
+                latency,
             }
         })
         .collect::<Vec<_>>();
@@ -286,7 +286,7 @@ mod tests {
                 iterations_total: 5,
                 checks_failed_total: 6,
                 checks_failed: [("c1".to_string(), 6)].into_iter().collect(),
-                latency_ms: None,
+                latency: None,
             }],
         };
 

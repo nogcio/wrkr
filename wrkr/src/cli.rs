@@ -2,8 +2,57 @@ use clap::{Args, Parser, Subcommand};
 use std::path::PathBuf;
 use std::time::Duration;
 
-fn parse_duration(s: &str) -> Result<Duration, humantime::DurationError> {
-    humantime::parse_duration(s)
+use crate::script_language::{ScriptLanguage, parse_script_language};
+
+fn parse_duration(input: &str) -> Result<Duration, String> {
+    let s = input.trim();
+    if s.is_empty() {
+        return Err("duration cannot be empty (expected e.g. 10s, 250ms, 1m)".to_string());
+    }
+
+    let number_end = s
+        .char_indices()
+        .find(|(_, ch)| !ch.is_ascii_digit())
+        .map_or(s.len(), |(idx, _)| idx);
+
+    if number_end == 0 {
+        return Err(format!(
+            "invalid duration '{s}' (expected e.g. 10s, 250ms, 1m)"
+        ));
+    }
+
+    let (number_str, unit_str) = s.split_at(number_end);
+    let value: u64 = number_str
+        .parse()
+        .map_err(|_| format!("invalid duration '{s}' (expected e.g. 10s, 250ms, 1m)"))?;
+
+    let unit = unit_str.trim();
+    match unit {
+        "" | "s" | "sec" | "secs" | "second" | "seconds" => Ok(Duration::from_secs(value)),
+        "ms" | "msec" | "msecs" | "millisecond" | "milliseconds" => {
+            Ok(Duration::from_millis(value))
+        }
+        "us" | "µs" | "usec" | "usecs" | "microsecond" | "microseconds" => {
+            Ok(Duration::from_micros(value))
+        }
+        "ns" | "nsec" | "nsecs" | "nanosecond" | "nanoseconds" => Ok(Duration::from_nanos(value)),
+        "m" | "min" | "mins" | "minute" | "minutes" => {
+            let secs = value
+                .checked_mul(60)
+                .ok_or_else(|| format!("duration '{s}' is too large"))?;
+            Ok(Duration::from_secs(secs))
+        }
+        "h" | "hr" | "hrs" | "hour" | "hours" => {
+            let secs = value
+                .checked_mul(60)
+                .and_then(|v| v.checked_mul(60))
+                .ok_or_else(|| format!("duration '{s}' is too large"))?;
+            Ok(Duration::from_secs(secs))
+        }
+        _ => Err(format!(
+            "invalid duration '{s}' (expected e.g. 10s, 250ms, 1m)"
+        )),
+    }
 }
 
 #[derive(Debug, Clone, Copy, clap::ValueEnum)]
@@ -36,7 +85,7 @@ pub enum Command {
     )]
     Run(RunArgs),
 
-    /// Scaffold a Lua scripting workspace (LuaLS stubs, .luarc.json, and an example script)
+    /// Scaffold a scripting workspace for a specific runtime language
     Init(InitArgs),
 }
 
@@ -54,9 +103,13 @@ pub struct InitArgs {
     #[arg(long)]
     pub vscode: bool,
 
-    /// Script filename to create in the target directory
-    #[arg(long, default_value = "script.lua")]
-    pub script: String,
+    /// Script runtime language to scaffold (e.g. lua)
+    #[arg(long, value_name = "LANG", value_parser = parse_script_language)]
+    pub lang: ScriptLanguage,
+
+    /// Script filename to create in the target directory (defaults based on --lang)
+    #[arg(long)]
+    pub script: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -89,6 +142,21 @@ pub struct RunArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_duration_accepts_common_units() {
+        assert_eq!(parse_duration("250ms"), Ok(Duration::from_millis(250)));
+        assert_eq!(parse_duration("10s"), Ok(Duration::from_secs(10)));
+        assert_eq!(parse_duration("1m"), Ok(Duration::from_secs(60)));
+        assert_eq!(parse_duration("2h"), Ok(Duration::from_secs(2 * 60 * 60)));
+    }
+
+    #[test]
+    fn parse_duration_rejects_invalid_values() {
+        assert!(parse_duration("").is_err());
+        assert!(parse_duration("abc").is_err());
+        assert!(parse_duration("10x").is_err());
+    }
 
     #[test]
     fn cli_parses_run_with_iterations() {
@@ -130,7 +198,7 @@ mod tests {
 
     #[test]
     fn cli_parses_init_defaults() {
-        let parsed = Cli::try_parse_from(["wrkr", "init"]);
+        let parsed = Cli::try_parse_from(["wrkr", "init", "--lang", "lua"]);
         let cli = match parsed {
             Ok(v) => v,
             Err(err) => panic!("failed to parse args: {err}"),
@@ -141,7 +209,8 @@ mod tests {
                 assert_eq!(args.dir, PathBuf::from("."));
                 assert!(!args.force);
                 assert!(!args.vscode);
-                assert_eq!(args.script, "script.lua".to_string());
+                assert_eq!(args.lang, ScriptLanguage::Lua);
+                assert_eq!(args.script, None);
             }
             Command::Run(_) => panic!("expected init command"),
         }

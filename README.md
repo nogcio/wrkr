@@ -67,7 +67,7 @@ Binary will be at `./target/release/wrkr`.
 If you want editor autocomplete + type hints for `require("wrkr/...")` modules (LuaLS), scaffold a small workspace:
 
 ```bash
-wrkr init
+wrkr init --lang lua
 ```
 
 This writes:
@@ -79,7 +79,7 @@ This writes:
 Optional (VS Code):
 
 ```bash
-wrkr init --vscode
+wrkr init --lang lua --vscode
 ```
 
 ### 1) Run the local test server (optional)

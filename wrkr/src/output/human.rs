@@ -3,15 +3,15 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 
-mod duration;
 mod format;
 mod progress;
 mod summary;
 
-use duration::format_duration_single;
 use format::{format_bytes, format_rate};
 use progress::HumanProgress;
 use summary::render;
+
+use crate::output::human::format::*;
 
 use super::OutputFormatter;
 
@@ -113,11 +113,7 @@ impl OutputFormatter for HumanReadableOutput {
             let (total_duration_opt, message) = match &u.progress {
                 wrkr_core::ScenarioProgress::ConstantVus { vus, duration } => (
                     *duration,
-                    format!(
-                        "vus={vus} elapsed={}{}",
-                        format_duration_single(u.elapsed),
-                        rates
-                    ),
+                    format!("vus={vus} elapsed={}{}", format_duration(u.elapsed), rates),
                 ),
                 wrkr_core::ScenarioProgress::RampingVus {
                     total_duration,
@@ -129,12 +125,12 @@ impl OutputFormatter for HumanReadableOutput {
                             stage.stage,
                             stage.stages,
                             stage.current_target,
-                            format_duration_single(u.elapsed),
-                            format_duration_single(stage.stage_remaining),
+                            format_duration(u.elapsed),
+                            format_duration(stage.stage_remaining),
                             rates
                         )
                     } else {
-                        format!("elapsed={}{}", format_duration_single(u.elapsed), rates)
+                        format!("elapsed={}{}", format_duration(u.elapsed), rates)
                     };
                     (Some(*total_duration), msg)
                 }
@@ -148,7 +144,7 @@ impl OutputFormatter for HumanReadableOutput {
                 } => {
                     let mut msg = format!(
                         "active_vus={active_vus}/{max_vus} dropped={dropped_iterations_total} elapsed={}{}",
-                        format_duration_single(u.elapsed),
+                        format_duration(u.elapsed),
                         rates
                     );
                     if let Some(stage) = stage {

@@ -3,6 +3,7 @@ mod init;
 mod output;
 mod run;
 mod runtime;
+mod script_language;
 
 use clap::Parser;
 use mimalloc::MiMalloc;

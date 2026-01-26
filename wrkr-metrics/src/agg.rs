@@ -303,7 +303,7 @@ mod tests {
     #[test]
     fn query_merge_histogram_respects_missing_tag_filter() {
         let reg = Registry::default();
-        let metric = reg.register("request_latency_ms", MetricKind::Histogram);
+        let metric = reg.register("request_latency", MetricKind::Histogram);
 
         let scenario_k = reg.resolve_key("scenario");
         let protocol_k = reg.resolve_key("protocol");

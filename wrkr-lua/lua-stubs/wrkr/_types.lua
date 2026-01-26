@@ -20,7 +20,7 @@
 
 ---@class wrkr.LatencyDistributionPoint
 ---@field p integer
----@field ms integer
+---@field value integer
 
 ---@alias wrkr.MetricKind "trend"|"counter"|"gauge"|"rate"
 
@@ -62,19 +62,19 @@
 ---@field dropped_iterations_total integer
 ---@field bytes_received_total integer
 ---@field bytes_sent_total integer
----@field run_duration_ms integer
+---@field run_duration integer
 ---@field rps number
 ---@field req_per_sec_avg number
 ---@field req_per_sec_stdev number
 ---@field req_per_sec_max number
 ---@field req_per_sec_stdev_pct number
----@field latency_p50_ms number|nil
----@field latency_p75_ms number|nil
----@field latency_p90_ms number|nil
----@field latency_p95_ms number|nil
----@field latency_p99_ms number|nil
----@field latency_mean_ms number|nil
----@field latency_stdev_ms number|nil
----@field latency_max_ms integer|nil
----@field latency_distribution_ms wrkr.LatencyDistributionPoint[]
+---@field latency_p50 number|nil
+---@field latency_p75 number|nil
+---@field latency_p90 number|nil
+---@field latency_p95 number|nil
+---@field latency_p99 number|nil
+---@field latency_mean number|nil
+---@field latency_stdev number|nil
+---@field latency_max integer|nil
+---@field latency_distribution wrkr.LatencyDistributionPoint[]
 ---@field metrics wrkr.MetricSeriesSummary[]

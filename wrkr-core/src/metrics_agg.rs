@@ -137,10 +137,10 @@ impl MetricComputer {
         let (checks_failed_total, checks_failed) =
             compute_checks_failed(metrics, self.checks_metric, keys, scenario_value);
 
-        // IMPORTANT: request_latency_ms is recorded twice (overall + protocol-scoped).
+        // IMPORTANT: request_latency is recorded twice (overall + protocol-scoped).
         // For overall scenario latency we only want the series without `protocol`.
         let latency = metrics
-            .query(self.request_ids.latency_ms)
+            .query(self.request_ids.latency)
             .where_eq(keys.scenario, scenario_value)
             .where_missing(keys.protocol)
             .merge_histogram_summary_single();
@@ -168,27 +168,27 @@ impl MetricComputer {
         let rps_now = req_delta as f64 / dt;
         rps_stats.push(rps_now);
 
-        let mut latency_mean_ms = 0.0;
-        let mut latency_stdev_ms = 0.0;
-        let mut latency_max_ms = 0u64;
-        let mut latency_p50_ms = 0u64;
-        let mut latency_p75_ms = 0u64;
-        let mut latency_p90_ms = 0u64;
-        let mut latency_p99_ms = 0u64;
+        let mut latency_mean = 0.0;
+        let mut latency_stdev = 0.0;
+        let mut latency_max = 0u64;
+        let mut latency_p50 = 0u64;
+        let mut latency_p75 = 0u64;
+        let mut latency_p90 = 0u64;
+        let mut latency_p99 = 0u64;
         let mut latency_stdev_pct = 0.0;
 
         if let Some(lat) = latency {
-            latency_mean_ms = lat.mean.unwrap_or(0.0);
-            latency_stdev_ms = lat.stdev.unwrap_or(0.0);
-            latency_max_ms = lat.max.unwrap_or(0.0) as u64;
+            latency_mean = lat.mean.unwrap_or(0.0);
+            latency_stdev = lat.stdev.unwrap_or(0.0);
+            latency_max = lat.max.unwrap_or(0.0) as u64;
 
-            latency_p50_ms = lat.p50.unwrap_or(0.0) as u64;
-            latency_p75_ms = lat.p75.unwrap_or(0.0) as u64;
-            latency_p90_ms = lat.p90.unwrap_or(0.0) as u64;
-            latency_p99_ms = lat.p99.unwrap_or(0.0) as u64;
+            latency_p50 = lat.p50.unwrap_or(0.0) as u64;
+            latency_p75 = lat.p75.unwrap_or(0.0) as u64;
+            latency_p90 = lat.p90.unwrap_or(0.0) as u64;
+            latency_p99 = lat.p99.unwrap_or(0.0) as u64;
 
-            if latency_mean_ms > 0.0 {
-                latency_stdev_pct = (latency_stdev_ms / latency_mean_ms) * 100.0;
+            if latency_mean > 0.0 {
+                latency_stdev_pct = (latency_stdev / latency_mean) * 100.0;
             }
         }
 
@@ -210,13 +210,13 @@ impl MetricComputer {
             req_per_sec_max: rps_stats.max(),
             req_per_sec_stdev_pct: rps_stats.stdev_pct(),
 
-            latency_mean_ms,
-            latency_stdev_ms,
-            latency_max_ms,
-            latency_p50_ms,
-            latency_p75_ms,
-            latency_p90_ms,
-            latency_p99_ms,
+            latency_mean,
+            latency_stdev,
+            latency_max,
+            latency_p50,
+            latency_p75,
+            latency_p90,
+            latency_p99,
             latency_stdev_pct,
 
             iterations_total: snapshot.iterations_total,
@@ -263,8 +263,8 @@ impl MetricComputer {
         let (checks_failed_total, checks_failed) =
             compute_checks_failed(metrics, self.checks_metric, keys, scenario_value);
 
-        let latency_ms = metrics
-            .query(self.request_ids.latency_ms)
+        let latency = metrics
+            .query(self.request_ids.latency)
             .where_eq(keys.scenario, scenario_value)
             .where_missing(keys.protocol)
             .merge_histogram_summary_single();
@@ -278,7 +278,7 @@ impl MetricComputer {
             iterations_total,
             checks_failed_total,
             checks_failed,
-            latency_ms,
+            latency,
         }
     }
 }

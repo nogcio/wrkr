@@ -25,6 +25,8 @@ If you call a metric inside a [wrkr/group](group.md) group, a `group` tag is add
 
 `name` must be non-empty.
 
+Note: metric names are global within a run. Avoid using names reserved by `wrkr` itself (for example `vu_active` / `vu_active_max`). Reusing a built-in name will mix your updates into internal metrics and can produce confusing summaries (including negative `vu_active`).
+
 ## `metric:add(value, tags?)`
 
 - Trend/Counter/Gauge: `value` is a number
@@ -37,12 +39,12 @@ local metrics = require("wrkr/metrics")
 local http = require("wrkr/http")
 local env = require("wrkr/env")
 
-local latency = metrics.Trend("my_latency_ms")
+local latency = metrics.Trend("my_latency")
 
 function Default()
   local started = os.clock()
   local res = http.get(env.BASE_URL .. "/plaintext")
-  local elapsed_ms = (os.clock() - started) * 1000
-  latency:add(elapsed_ms, { status = res.status })
+  local elapsed_us = (os.clock() - started) * 1000000
+  latency:add(elapsed_us, { status = res.status })
 end
 ```

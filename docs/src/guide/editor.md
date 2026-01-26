@@ -5,7 +5,7 @@ To get autocomplete and type hints for `require("wrkr/... ")` modules:
 1. Run:
 
 ```bash
-wrkr init
+wrkr init --lang lua
 ```
 
 2. Open the folder in your editor.
@@ -18,5 +18,5 @@ This scaffolds:
 If you’re using VS Code, you can also add recommendations:
 
 ```bash
-wrkr init --vscode
+wrkr init --lang lua --vscode
 ```

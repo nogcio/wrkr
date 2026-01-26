@@ -46,8 +46,9 @@ pub struct HistogramSummary {
 }
 
 pub(crate) fn new_default_histogram() -> Histogram<u64> {
-    // Defaults compatible with typical latency ms.
-    match Histogram::<u64>::new_with_bounds(1, 60_000 * 60, 3) {
+    // Defaults compatible with typical latency in microseconds.
+    // Upper bound: 1 hour in microseconds.
+    match Histogram::<u64>::new_with_bounds(1, 3_600_000_000, 3) {
         Ok(h) => h,
         Err(err) => panic!("failed to create histogram: {err}"),
     }

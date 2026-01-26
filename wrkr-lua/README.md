@@ -164,7 +164,7 @@ This repo includes LuaLS type stubs for the `wrkr/*` modules under `wrkr-lua/lua
 If you're an end user installing only the `wrkr` binary (without this repo), run:
 
 ```bash
-wrkr init
+wrkr init --lang lua
 ```
 
 This scaffolds a small script workspace in the current directory including `.luarc.json` and `.wrkr/lua-stubs/`.

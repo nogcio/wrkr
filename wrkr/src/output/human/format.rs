@@ -46,21 +46,19 @@ pub(crate) fn format_rate(v: f64) -> String {
     }
 }
 
-pub(crate) fn format_duration_from_millis(ms: Option<f64>) -> String {
-    let Some(ms) = ms else {
-        return "-".to_string();
-    };
-    format_duration_adaptive(ms * 1_000.0)
-}
-
-pub(crate) fn format_duration_from_micros(us: Option<f64>) -> String {
+pub(crate) fn format_duration_from_micros_opt(us: Option<f64>) -> String {
     let Some(us) = us else {
         return "-".to_string();
     };
-    format_duration_adaptive(us)
+    format_duration_from_micros(us)
 }
 
-fn format_duration_adaptive(us: f64) -> String {
+pub(crate) fn format_duration(d: std::time::Duration) -> String {
+    let us = (d.as_secs() as f64) * 1_000_000.0 + (d.subsec_micros() as f64);
+    format_duration_from_micros(us)
+}
+
+pub(crate) fn format_duration_from_micros(us: f64) -> String {
     if !us.is_finite() {
         return "-".to_string();
     }

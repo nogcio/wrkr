@@ -32,7 +32,7 @@ Binary will be at `./target/release/wrkr`.
 If you want editor autocomplete + type hints (LuaLS), run:
 
 ```bash
-wrkr init
+wrkr init --lang lua
 ```
 
 This writes:
@@ -44,7 +44,7 @@ This writes:
 VS Code recommendations (optional):
 
 ```bash
-wrkr init --vscode
+wrkr init --lang lua --vscode
 ```
 
 ## 2) Run a script

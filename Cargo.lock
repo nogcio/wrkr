@@ -2136,7 +2136,6 @@ version = "0.0.6"
 dependencies = [
  "anyhow",
  "clap",
- "humantime",
  "indicatif",
  "mimalloc",
  "serde",

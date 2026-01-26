@@ -1,52 +1,72 @@
 {
-  "version": "2.0.0",
-  "inputs": [
-    {
-      "id": "wrkr_lua_script",
-      "type": "promptString",
-      "description": "Lua script path for `wrkr run`",
-      "default": "examples/plaintext.lua"
-    },
-    {
-      "id": "wrkr_base_url",
-      "type": "promptString",
-      "description": "BASE_URL for scripts",
-      "default": "http://localhost:54320"
-    }
-  ],
-  "tasks": [
-    {
-      "label": "cargo: fmt (workspace)",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["fmt", "--all"],
-      "problemMatcher": []
-    },
-    {
-      "label": "cargo: clippy (workspace, deny warnings)",
-      "type": "shell",
-      "command": "cargo",
-      "args": ["clippy", "--all-targets", "--", "-D", "warnings"],
-      "problemMatcher": ["$rustc"]
-    },
-    {
-      "label": "run: wrkr (lua script)",
-      "type": "shell",
-      "command": "cargo",
-      "args": [
-        "run",
-        "--bin",
-        "wrkr",
-        "--",
-        "run",
-        "${input:wrkr_lua_script}"
-      ],
-      "options": {
-        "env": {
-          "BASE_URL": "${input:wrkr_base_url}"
-        }
-      },
-      "problemMatcher": ["$rustc"]
-    }
-  ]
+	"version": "2.0.0",
+	"inputs": [
+		{
+			"id": "wrkr_lua_script",
+			"type": "promptString",
+			"description": "Lua script path for `wrkr run`",
+			"default": "examples/plaintext.lua"
+		},
+		{
+			"id": "wrkr_base_url",
+			"type": "promptString",
+			"description": "BASE_URL for scripts",
+			"default": "http://localhost:54320"
+		}
+	],
+	"tasks": [
+		{
+			"label": "cargo: fmt (workspace)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"fmt",
+				"--all"
+			],
+			"problemMatcher": []
+		},
+		{
+			"label": "cargo: clippy (workspace, deny warnings)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"clippy",
+				"--all-targets",
+				"--",
+				"-D",
+				"warnings"
+			],
+			"problemMatcher": [
+				"$rustc"
+			]
+		},
+		{
+			"label": "run: wrkr (lua script)",
+			"type": "shell",
+			"command": "cargo",
+			"args": [
+				"run",
+				"--bin",
+				"wrkr",
+				"--",
+				"run",
+				"${input:wrkr_lua_script}"
+			],
+			"options": {
+				"env": {
+					"BASE_URL": "${input:wrkr_base_url}"
+				}
+			},
+			"problemMatcher": [
+				"$rustc"
+			]
+		},
+		{
+			"label": "run: wrkr (release, grpc_aggregate, diag vu_active)",
+			"type": "shell",
+			"command": "WRKR_DIAG_VU_ACTIVE=1 cargo run -p wrkr --release -- run ./examples/grpc_aggregate.lua --env BASE_URL=http://127.0.0.1:54320",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
 }

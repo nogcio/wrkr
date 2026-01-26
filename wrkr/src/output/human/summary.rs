@@ -2,10 +2,9 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Write as _;
 use std::time::Duration;
 
-use super::format::{
-    format_bytes, format_duration_from_micros, format_duration_from_millis, format_rate,
-    format_tags_inline,
-};
+use crate::output::human::format::format_duration_from_micros_opt;
+
+use super::format::*;
 
 pub(crate) fn render(
     summary: &wrkr_core::RunSummary,
@@ -61,16 +60,20 @@ pub(crate) fn render(
             }
         }
 
-        if let Some(lat) = &s.latency_ms {
+        if let Some(h) = &s.latency {
             writeln!(
-                &mut out,
-                "  latency_ms: {} (n={})",
-                format_time_summary_millis(lat.mean, lat.min, lat.p50, lat.max, lat.p90, lat.p95),
-                lat.count
+                out,
+                "  latency = p50={} p90={} p99={} mean={} max={} (n={})",
+                format_duration_from_micros_opt(h.p50),
+                format_duration_from_micros_opt(h.p90),
+                format_duration_from_micros_opt(h.p99),
+                format_duration_from_micros_opt(h.mean),
+                format_duration_from_micros_opt(h.max),
+                h.count
             )
             .ok();
         } else {
-            out.push_str("  latency_ms: n/a\n");
+            out.push_str("  latency: n/a\n");
         }
 
         out.push('\n');
@@ -148,50 +151,6 @@ impl Totals {
             .checks_failed_total
             .saturating_add(s.checks_failed_total);
     }
-}
-
-fn format_time_summary_millis(
-    mean: Option<f64>,
-    min: Option<f64>,
-    med: Option<f64>,
-    max: Option<f64>,
-    p90: Option<f64>,
-    p95: Option<f64>,
-) -> String {
-    format!(
-        "avg={} min={} med={} max={} p(90)={} p(95)={}",
-        format_duration_from_millis(mean),
-        format_duration_from_millis(min),
-        format_duration_from_millis(med),
-        format_duration_from_millis(max),
-        format_duration_from_millis(p90),
-        format_duration_from_millis(p95)
-    )
-}
-
-fn format_time_summary_micros(
-    mean: Option<f64>,
-    min: Option<f64>,
-    med: Option<f64>,
-    max: Option<f64>,
-    p90: Option<f64>,
-    p95: Option<f64>,
-) -> String {
-    format!(
-        "avg={} min={} med={} max={} p(90)={} p(95)={}",
-        format_duration_from_micros(mean),
-        format_duration_from_micros(min),
-        format_duration_from_micros(med),
-        format_duration_from_micros(max),
-        format_duration_from_micros(p90),
-        format_duration_from_micros(p95)
-    )
-}
-
-fn is_time_histogram_metric(name: &str) -> bool {
-    // Conservative: only apply the new format to time-like histograms.
-    // Latency is milliseconds; iteration duration is microseconds.
-    name.contains("latency") || name.contains("duration")
 }
 
 fn render_checks(series: &[wrkr_core::MetricSeriesSummary], out: &mut String) {
@@ -406,34 +365,19 @@ fn render_metrics(series: &[wrkr_core::MetricSeriesSummary], out: &mut String) {
                     }
                 }
                 wrkr_core::MetricValue::Histogram(h) => {
-                    if is_time_histogram_metric(&s.name) {
-                        let formatted = if s.name == "iteration_duration_seconds" {
-                            format_time_summary_micros(h.mean, h.min, h.p50, h.max, h.p90, h.p95)
-                        } else {
-                            format_time_summary_millis(h.mean, h.min, h.p50, h.max, h.p90, h.p95)
-                        };
-
-                        writeln!(
-                            out,
-                            "    {}{} = {formatted} (n={})",
-                            s.name, tags_s, h.count
-                        )
-                        .ok();
-                    } else {
-                        writeln!(
-                            out,
-                            "    {}{} = p50={} p90={} p99={} mean={} max={} (n={})",
-                            s.name,
-                            tags_s,
-                            format_duration_from_millis(h.p50),
-                            format_duration_from_millis(h.p90),
-                            format_duration_from_millis(h.p99),
-                            format_duration_from_millis(h.mean),
-                            format_duration_from_millis(h.max),
-                            h.count
-                        )
-                        .ok();
-                    }
+                    writeln!(
+                        out,
+                        "    {}{} = p50={} p90={} p99={} mean={} max={} (n={})",
+                        s.name,
+                        tags_s,
+                        format_duration_from_micros_opt(h.p50),
+                        format_duration_from_micros_opt(h.p90),
+                        format_duration_from_micros_opt(h.p99),
+                        format_duration_from_micros_opt(h.mean),
+                        format_duration_from_micros_opt(h.max),
+                        h.count
+                    )
+                    .ok();
                 }
             }
         }
@@ -458,7 +402,7 @@ mod tests {
                 iterations_total: 10,
                 checks_failed_total: 1,
                 checks_failed: [("status_is_200".to_string(), 1)].into_iter().collect(),
-                latency_ms: None,
+                latency: None,
             }],
         };
 
@@ -469,7 +413,7 @@ mod tests {
         assert!(text.contains("bytes: recv 2.00KiB sent 1.00KiB"));
         assert!(text.contains("checks_failed_total: 1"));
         assert!(text.contains("status_is_200: 1"));
-        assert!(text.contains("latency_ms: n/a"));
+        assert!(text.contains("latency: n/a"));
         assert!(text.contains("totals"));
         assert!(text.contains("rates: rps="));
         assert!(text.contains("tps="));
