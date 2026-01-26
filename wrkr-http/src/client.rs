@@ -5,6 +5,7 @@ use hyper::body::Incoming;
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use std::collections::BTreeMap;
 use std::time::Duration;
 
 use super::estimate::{estimate_http_request_bytes_parts, estimate_http1_response_head_bytes};
@@ -89,6 +90,25 @@ impl HttpClient {
 
         let (parts, body) = res.into_parts();
         let status = parts.status.as_u16();
+
+        // Normalize headers to lowercase keys for scripting ergonomics.
+        // If there are multiple values for a header, join them with ", ".
+        let mut merged: BTreeMap<String, String> = BTreeMap::new();
+        for (name, value) in parts.headers.iter() {
+            let key = name.as_str().to_ascii_lowercase();
+            let v = String::from_utf8_lossy(value.as_bytes()).to_string();
+            merged
+                .entry(key)
+                .and_modify(|cur| {
+                    if !cur.is_empty() {
+                        cur.push_str(", ");
+                    }
+                    cur.push_str(&v);
+                })
+                .or_insert(v);
+        }
+        let headers: Vec<(String, String)> = merged.into_iter().collect();
+
         let head_bytes =
             estimate_http1_response_head_bytes(parts.version, parts.status, &parts.headers);
         let body = body.collect().await?.to_bytes();
@@ -97,6 +117,7 @@ impl HttpClient {
         Ok(HttpResponse {
             status,
             body,
+            headers,
             bytes_sent,
             bytes_received,
         })

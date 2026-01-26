@@ -6,6 +6,8 @@ use bytes::Bytes;
 pub struct HttpResponse {
     pub status: u16,
     pub body: Bytes,
+    /// Response headers (lowercased header names). Multiple values are joined with ", ".
+    pub headers: Vec<(String, String)>,
     /// Estimated bytes sent on the wire for this request (HTTP/1.1 request line + headers + body).
     pub bytes_sent: u64,
     /// Estimated bytes received on the wire for this response (HTTP/1.1 status line + headers + body).

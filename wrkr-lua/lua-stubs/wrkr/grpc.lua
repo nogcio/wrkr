@@ -39,7 +39,9 @@ local Client = {}
 
 ---@return wrkr.grpc.Client
 ---@param opts wrkr.grpc.NewOptions?
-function ClientModule.new(opts) end
+function ClientModule.new(opts)
+	return Client
+end
 
 ---@param paths string[]
 ---@param file string

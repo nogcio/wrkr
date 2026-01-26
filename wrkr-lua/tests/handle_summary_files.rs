@@ -15,7 +15,7 @@ fn handle_summary_invalid_path_is_rejected_by_write_output_files() -> Result<()>
     let env = support::env_with(&[]);
     let run_ctx = support::run_ctx_for_script(&script, env);
 
-    let out = wrkr_lua::run_handle_summary(&run_ctx)?;
+    let out = wrkr_lua::run_handle_summary(&run_ctx, &wrkr_core::RunSummary::default())?;
     let Some(out) = out else {
         panic!("expected HandleSummary outputs");
     };
@@ -51,7 +51,7 @@ async fn handle_summary_checks_by_name_produces_json_file() -> Result<()> {
     let env = support::env_with(&[]);
     let run_ctx = support::run_ctx_for_script(&script, env);
 
-    let out = wrkr_lua::run_handle_summary(&run_ctx)?;
+    let out = wrkr_lua::run_handle_summary(&run_ctx, &wrkr_core::RunSummary::default())?;
     let Some(out) = out else {
         panic!("expected HandleSummary outputs");
     };

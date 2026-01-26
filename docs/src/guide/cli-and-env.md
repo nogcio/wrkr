@@ -2,13 +2,14 @@
 
 ## Precedence
 
-At runtime, values typically come from:
+`wrkr` has two separate “inputs” for a run:
 
-1. Script `options` table (defaults)
-2. CLI flags (override script)
-3. Environment variables (available to the script via `require("wrkr/env")`)
-
-CLI flags always override script options.
+1. **Run configuration** (iterations/vus/duration/scenarios):
+	- Script `options` table provides defaults.
+	- CLI flags (e.g. `--vus`, `--duration`, `--iterations`) override the script.
+2. **Environment variables** (read in Lua via `require("wrkr/env")`):
+	- The current process environment is visible to the script.
+	- CLI `--env KEY=VALUE` entries override the current process env for that run.
 
 ## Env vars
 

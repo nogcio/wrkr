@@ -8,6 +8,7 @@ pub(super) struct HttpRequestOptions {
     pub(super) params: Vec<(String, String)>,
     pub(super) timeout: Option<Duration>,
     pub(super) tags: Vec<(String, String)>,
+    pub(super) name: Option<String>,
 }
 
 pub(super) fn parse_http_opts(opts: Option<Table>) -> crate::Result<HttpRequestOptions> {
@@ -17,6 +18,7 @@ pub(super) fn parse_http_opts(opts: Option<Table>) -> crate::Result<HttpRequestO
             params: Vec::new(),
             timeout: None,
             tags: Vec::new(),
+            name: None,
         });
     };
 
@@ -86,11 +88,20 @@ pub(super) fn parse_http_opts(opts: Option<Table>) -> crate::Result<HttpRequestO
         }
     }
 
+    let name = match opts.get::<Value>("name").ok() {
+        None | Some(Value::Nil) => None,
+        Some(Value::String(s)) => Some(s.to_string_lossy().to_string()),
+        Some(Value::Integer(i)) => Some(i.to_string()),
+        Some(Value::Number(n)) => Some(n.to_string()),
+        Some(_) => None,
+    };
+
     Ok(HttpRequestOptions {
         headers,
         params,
         timeout,
         tags,
+        name,
     })
 }
 

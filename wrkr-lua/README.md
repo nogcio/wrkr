@@ -1,6 +1,6 @@
 # wrkr-lua
 
-This crate embeds Lua (via `mlua`) and exposes a small runtime API to scripts via `require("wrkr/... ")` modules.
+This crate embeds Lua (via `mlua`) and exposes a small runtime API to scripts via `require("wrkr/...")` modules.
 
 ## Script shape
 
@@ -96,13 +96,22 @@ options = {
 ## Runtime modules
 
 - `require("wrkr/http")`
-  - `http.get(url, opts?) -> { status, body, error? }`
-  - `http.post(url, body, opts?) -> { status, body, error? }`
+  - `http.get(url, opts?) -> { status, body, headers, error? }`
+  - `http.post(url, body, opts?) -> { status, body, headers, error? }`
+  - `http.put(url, body, opts?) -> { status, body, headers, error? }`
+  - `http.patch(url, body, opts?) -> { status, body, headers, error? }`
+  - `http.delete(url, opts?) -> { status, body, headers, error? }`
+  - `http.head(url, opts?) -> { status, body, headers, error? }`
+  - `http.options(url, opts?) -> { status, body, headers, error? }`
+  - `http.request(method, url, body?, opts?) -> { status, body, headers, error? }`
     - If `body` is a Lua string, it is sent as-is.
-    - Otherwise, `body` is JSON-encoded (using `wrkr/json`) and sent with `Content-Type: application/json; charset=utf-8` unless overridden.
+      - Default `Content-Type` is `text/plain; charset=utf-8` unless overridden.
+    - Otherwise, `body` is JSON-encoded (same encoding as `wrkr/json.encode`) and sent with `Content-Type: application/json; charset=utf-8` unless overridden.
   - `opts.headers`: table of headers
   - `opts.params`: table of query params
   - `opts.timeout`: number (seconds) or duration string (e.g. `"250ms"`, `"10s"`)
+  - `opts.tags`: table of extra metric tags
+  - `opts.name`: string (recorded as request metric tag `name`)
 
 - `require("wrkr/check")`
   - `check(res, { ["name"] = function(res) return bool end, ... }) -> bool`
@@ -117,9 +126,25 @@ options = {
 - `require("wrkr/vu")`
   - `vu.id() -> integer` (stable numeric VU id; `0` during the options-parsing phase)
 
+- `require("wrkr/group")`
+  - `group.group(name, fn) -> any` (async)
+
+- `require("wrkr/uuid")`
+  - `uuid.v4() -> string`
+
+- `require("wrkr/metrics")`
+  - `metrics.Trend(name) -> metric`
+  - `metrics.Counter(name) -> metric`
+  - `metrics.Gauge(name) -> metric`
+  - `metrics.Rate(name) -> metric`
+  - `metric:add(value, tags?) -> nil`
+
+- `require("wrkr/grpc")` (available in `wrkr` builds with gRPC enabled; default)
+  - `grpc.Client.new(opts?) -> client`
+
 - `require("wrkr/shared")`
   - `shared.get(key) -> any|nil`
-  - `shared.set(key, value) -> nil` (value is JSON-encoded)
+  - `shared.set(key, value) -> nil` (value is stored using the `wrkr-value` contract)
   - `shared.delete(key) -> nil`
   - `shared.incr(key, delta?) -> integer`
   - `shared.counter(key) -> integer`
@@ -131,7 +156,10 @@ options = {
   - Reads UTF-8 text relative to the script path.
 
 - `require("wrkr")`
-  - Convenience table aggregating the modules above.
+  - Convenience table aggregating common modules:
+    - `http` (if enabled)
+    - `grpc` (if enabled)
+    - `check`, `env`, `fs`, `group`, `json`, `uuid`, `metrics`, `shared`, `vu`
 
 ## Local modules (vendoring)
 

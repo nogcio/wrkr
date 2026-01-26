@@ -50,8 +50,9 @@ impl ScriptRuntime for LuaRuntime {
     fn run_handle_summary(
         &self,
         run_ctx: &wrkr_core::RunScenariosContext,
+        summary: &wrkr_core::RunSummary,
     ) -> std::result::Result<Option<ScriptOutputs>, RuntimeError> {
-        let out = wrkr_lua::run_handle_summary(run_ctx).map_err(RuntimeError::from)?;
+        let out = wrkr_lua::run_handle_summary(run_ctx, summary).map_err(RuntimeError::from)?;
 
         Ok(out.map(|o| ScriptOutputs {
             stdout: o.stdout,

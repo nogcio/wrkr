@@ -24,6 +24,7 @@ pub trait ScriptRuntime: Send + Sync {
     fn run_handle_summary(
         &self,
         run_ctx: &wrkr_core::RunScenariosContext,
+        summary: &wrkr_core::RunSummary,
     ) -> std::result::Result<Option<ScriptOutputs>, RuntimeError>;
 
     fn run_vu(

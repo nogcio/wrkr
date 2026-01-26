@@ -9,4 +9,5 @@ mod util;
 pub use client::HttpClient;
 pub use error::{Error, HttpTransportErrorKind, Result};
 pub use estimate::estimate_http_request_bytes;
+pub use http::Method;
 pub use types::{HttpRequest, HttpResponse};

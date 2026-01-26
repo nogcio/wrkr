@@ -1,44 +1,26 @@
 ---@meta
 
-local http = require("wrkr/http")
-local grpc = require("wrkr/grpc")
-local check = require("wrkr/check")
-local env = require("wrkr/env")
-local fs = require("wrkr/fs")
-local debug = require("wrkr/debug")
-local json = require("wrkr/json")
-local uuid = require("wrkr/uuid")
-local group = require("wrkr/group")
-local metrics = require("wrkr/metrics")
-local shared = require("wrkr/shared")
-local vu = require("wrkr/vu")
+local M = {}
 
----@class wrkr
----@field http wrkr.http
----@field grpc wrkr.grpc
----@field check fun(value: any, checks: table<string, fun(value: any): boolean>): boolean
----@field env wrkr.env
----@field fs wrkr.fs
----@field debug wrkr.debug
----@field json wrkr.json
----@field uuid wrkr.uuid
----@field group wrkr.group
----@field metrics wrkr.metrics
----@field shared wrkr.shared
----@field vu wrkr.vu
-local M = {
-  http = http,
-  grpc = grpc,
-  check = check,
-  env = env,
-  fs = fs,
-  debug = debug,
-  json = json,
-  uuid = uuid,
-  group = group,
-  metrics = metrics,
-  shared = shared,
-  vu = vu,
-}
+M.check = require("wrkr/check")
+M.env = require("wrkr/env")
+M.fs = require("wrkr/fs")
+M.debug = require("wrkr/debug")
+M.json = require("wrkr/json")
+M.uuid = require("wrkr/uuid")
+M.group = require("wrkr/group")
+M.metrics = require("wrkr/metrics")
+M.shared = require("wrkr/shared")
+M.vu = require("wrkr/vu")
+
+local ok_http, http = pcall(require, "wrkr/http")
+if ok_http then
+  M.http = http
+end
+
+local ok_grpc, grpc = pcall(require, "wrkr/grpc")
+if ok_grpc then
+  M.grpc = grpc
+end
 
 return M

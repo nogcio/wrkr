@@ -28,7 +28,7 @@ fn handle_summary_outputs_are_parsed() -> Result<()> {
     let env = support::env_with(&[]);
     let run_ctx = support::run_ctx_for_script(&script, env);
 
-    let out = wrkr_lua::run_handle_summary(&run_ctx)?;
+    let out = wrkr_lua::run_handle_summary(&run_ctx, &wrkr_core::RunSummary::default())?;
     let Some(out) = out else {
         panic!("expected HandleSummary outputs");
     };
@@ -49,7 +49,7 @@ fn handle_summary_non_table_is_treated_as_empty_outputs() -> Result<()> {
     let env = support::env_with(&[]);
     let run_ctx = support::run_ctx_for_script(&script, env);
 
-    let out = wrkr_lua::run_handle_summary(&run_ctx)?;
+    let out = wrkr_lua::run_handle_summary(&run_ctx, &wrkr_core::RunSummary::default())?;
     let Some(out) = out else {
         panic!("expected HandleSummary outputs");
     };

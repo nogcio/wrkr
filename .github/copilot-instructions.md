@@ -26,7 +26,7 @@
 
 - **Lua runner API rules**:
 	- **No globals**: do not expose `http`, `check`, `__ENV`, `open`, etc. as Lua globals.
-	- **Modules only**: expose all Lua APIs via `require("wrkr/... ")` style modules (e.g. `wrkr/http`, `wrkr/check`, `wrkr/env`, `wrkr/fs`).
+	- **Modules only**: expose all Lua APIs via `require("wrkr/...")` style modules (e.g. `wrkr/http`, `wrkr/check`, `wrkr/env`, `wrkr/fs`).
 
 - **Lua + LuaLS stubs must be warning-free**:
 	- When editing or adding files under `wrkr-lua/lua-stubs/`, ensure LuaLS (sumneko) produces no diagnostics.
@@ -41,7 +41,7 @@
 		- LuaLS/editor stubs for the built-in modules live under `wrkr-lua/lua-stubs/wrkr`.
 		- User-facing docs for the script contract and modules are in `wrkr-lua/README.md`.
 	- **Module model**:
-		- Built-ins are only available via `require("wrkr/... ")` (plus the convenience aggregate `require("wrkr")`).
+		- Built-ins are only available via `require("wrkr/...")` (plus the convenience aggregate `require("wrkr")`).
 		- The runner prepends the script directory to `package.path` so scripts can `require()` local files next to the script (`?.lua` and `?/init.lua`).
 		- Optional external module paths can be prepended via `WRKR_LUA_PATH`/`LUA_PATH` and `WRKR_LUA_CPATH`/`LUA_CPATH`.
 	- **Execution flow (two-phase)**:

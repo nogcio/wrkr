@@ -41,6 +41,7 @@ function Teardown() end
 function HandleSummary(summary)
   return {
     stdout = "custom\n",
+    stderr = "warnings\n",
     ["summary.json"] = require("wrkr/json").encode(summary) .. "\n",
   }
 end
@@ -49,4 +50,9 @@ end
 Notes:
 
 - Output files returned by `HandleSummary` are written relative to the current working directory.
+- `stdout`/`stderr` outputs are printed only when `--output human-readable` is selected (files are still written in all output modes).
+- `summary` is a plain Lua table with aggregated totals plus a per-scenario breakdown:
+  - Totals: `requests_total`, `failed_requests_total`, `bytes_received_total`, `bytes_sent_total`, `iterations_total`, `checks_failed_total`.
+  - Checks: `checks_failed` (table of check name -> count).
+  - Per scenario: `scenarios` (array of tables with the same fields plus `scenario`, `checks_failed`, and optional `latency`).
 - During the options-parsing phase, `vu.id()` is `0`.

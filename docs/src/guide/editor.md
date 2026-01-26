@@ -1,6 +1,6 @@
 # Editor setup (LuaLS)
 
-To get autocomplete and type hints for `require("wrkr/... ")` modules:
+To get autocomplete and type hints for `require("wrkr/...")` modules:
 
 1. Run:
 

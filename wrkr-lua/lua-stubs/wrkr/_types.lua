@@ -3,6 +3,7 @@
 ---@class wrkr.HttpResponse
 ---@field status integer HTTP status code, or 0 on transport error
 ---@field body string Response body decoded as UTF-8 (may be empty)
+---@field headers table<string, string> Response headers (lowercased header names)
 ---@field error? string Error message (present when status==0)
 
 ---@class wrkr.HttpRequestOptions

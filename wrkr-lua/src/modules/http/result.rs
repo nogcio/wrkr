@@ -3,6 +3,7 @@ use mlua::{Lua, Table};
 pub(super) struct HttpLuaResponse {
     pub(super) status: u16,
     pub(super) body: String,
+    pub(super) headers: Vec<(String, String)>,
     pub(super) error: Option<String>,
 }
 
@@ -11,6 +12,7 @@ impl HttpLuaResponse {
         Self {
             status: res.status,
             body: res.body_utf8().unwrap_or("").to_string(),
+            headers: res.headers,
             error: None,
         }
     }
@@ -19,6 +21,7 @@ impl HttpLuaResponse {
         Self {
             status: 0,
             body: String::new(),
+            headers: Vec::new(),
             error: Some(err.to_string()),
         }
     }
@@ -27,6 +30,13 @@ impl HttpLuaResponse {
         let t = lua.create_table()?;
         t.set("status", self.status)?;
         t.set("body", self.body)?;
+
+        let headers_tbl = lua.create_table()?;
+        for (k, v) in self.headers {
+            headers_tbl.set(k, v)?;
+        }
+        t.set("headers", headers_tbl)?;
+
         if let Some(error) = self.error {
             t.set("error", error)?;
         }

@@ -16,12 +16,13 @@ local http = require("wrkr/http")
   - `params`: table of query param name → value
   - `timeout`: number (seconds) or duration string (e.g. `"250ms"`, `"10s"`)
   - `tags`: table<string, string|number|boolean>
-  - `name`: string (metric name override)
+  - `name`: string (request metric tag `name` override)
 
 Returns a table:
 
 - `status`: integer (`0` on transport error)
 - `body`: string
+- `headers`: table<string, string> (lowercased header names)
 - `error`: string? (present on transport error)
 
 ### `http.post(url, body, opts?) -> res`
@@ -34,6 +35,30 @@ Body handling:
 - Otherwise, `body` is JSON-encoded (using `wrkr/json`) and default content-type is `application/json; charset=utf-8`.
 
 If `opts.headers` already contains `Content-Type`, it is not overridden.
+
+### `http.put(url, body, opts?) -> res`
+
+Same options/return shape as `post`.
+
+### `http.patch(url, body, opts?) -> res`
+
+Same options/return shape as `post`.
+
+### `http.delete(url, opts?) -> res`
+
+Same options/return shape as `get`.
+
+### `http.head(url, opts?) -> res`
+
+Same options/return shape as `get`.
+
+### `http.options(url, opts?) -> res`
+
+Same options/return shape as `get`.
+
+### `http.request(method, url, body?, opts?) -> res`
+
+Custom method escape hatch.
 
 ## Example
 

@@ -8,7 +8,7 @@ local check = require("wrkr/check")
 
 ## `check(value, checks) -> boolean`
 
-- `value`: table
+- `value`: any Lua value (commonly an HTTP/gRPC response table, but can be anything)
 - `checks`: table of `name -> function(value) return boolean end`
 
 Returns `true` if all checks pass, otherwise `false`.

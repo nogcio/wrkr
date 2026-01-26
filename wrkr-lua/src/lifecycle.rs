@@ -62,6 +62,7 @@ pub fn run_teardown(run_ctx: &wrkr_core::RunScenariosContext) -> Result<()> {
 
 pub fn run_handle_summary(
     run_ctx: &wrkr_core::RunScenariosContext,
+    summary: &wrkr_core::RunSummary,
 ) -> Result<Option<HandleSummaryOutputs>> {
     let lua = init_lua(run_ctx)?;
 
@@ -75,7 +76,71 @@ pub fn run_handle_summary(
     };
 
     let summary_tbl = lua.create_table()?;
-    //todo: populate summary_tbl with relevant data
+
+    let mut requests_total = 0u64;
+    let mut failed_requests_total = 0u64;
+    let mut bytes_received_total = 0u64;
+    let mut bytes_sent_total = 0u64;
+    let mut iterations_total = 0u64;
+    let mut checks_failed_total = 0u64;
+
+    let checks_failed_tbl = lua.create_table()?;
+    let scenarios_tbl = lua.create_table()?;
+
+    for (idx, s) in summary.scenarios.iter().enumerate() {
+        requests_total = requests_total.saturating_add(s.requests_total);
+        failed_requests_total = failed_requests_total.saturating_add(s.failed_requests_total);
+        bytes_received_total = bytes_received_total.saturating_add(s.bytes_received_total);
+        bytes_sent_total = bytes_sent_total.saturating_add(s.bytes_sent_total);
+        iterations_total = iterations_total.saturating_add(s.iterations_total);
+        checks_failed_total = checks_failed_total.saturating_add(s.checks_failed_total);
+
+        for (name, count) in &s.checks_failed {
+            let cur: Option<u64> = checks_failed_tbl.get(name.as_str()).ok();
+            checks_failed_tbl.set(name.as_str(), cur.unwrap_or(0).saturating_add(*count))?;
+        }
+
+        let scenario_tbl = lua.create_table()?;
+        scenario_tbl.set("scenario", s.scenario.as_str())?;
+        scenario_tbl.set("requests_total", s.requests_total)?;
+        scenario_tbl.set("failed_requests_total", s.failed_requests_total)?;
+        scenario_tbl.set("bytes_received_total", s.bytes_received_total)?;
+        scenario_tbl.set("bytes_sent_total", s.bytes_sent_total)?;
+        scenario_tbl.set("iterations_total", s.iterations_total)?;
+        scenario_tbl.set("checks_failed_total", s.checks_failed_total)?;
+
+        let scenario_checks_failed_tbl = lua.create_table()?;
+        for (name, count) in &s.checks_failed {
+            scenario_checks_failed_tbl.set(name.as_str(), *count)?;
+        }
+        scenario_tbl.set("checks_failed", scenario_checks_failed_tbl)?;
+
+        if let Some(lat) = &s.latency {
+            let latency_tbl = lua.create_table()?;
+            latency_tbl.set("p50", lat.p50)?;
+            latency_tbl.set("p75", lat.p75)?;
+            latency_tbl.set("p90", lat.p90)?;
+            latency_tbl.set("p95", lat.p95)?;
+            latency_tbl.set("p99", lat.p99)?;
+            latency_tbl.set("min", lat.min)?;
+            latency_tbl.set("max", lat.max)?;
+            latency_tbl.set("mean", lat.mean)?;
+            latency_tbl.set("stdev", lat.stdev)?;
+            latency_tbl.set("count", lat.count)?;
+            scenario_tbl.set("latency", latency_tbl)?;
+        }
+
+        scenarios_tbl.set(idx + 1, scenario_tbl)?;
+    }
+
+    summary_tbl.set("requests_total", requests_total)?;
+    summary_tbl.set("failed_requests_total", failed_requests_total)?;
+    summary_tbl.set("bytes_received_total", bytes_received_total)?;
+    summary_tbl.set("bytes_sent_total", bytes_sent_total)?;
+    summary_tbl.set("iterations_total", iterations_total)?;
+    summary_tbl.set("checks_failed_total", checks_failed_total)?;
+    summary_tbl.set("checks_failed", checks_failed_tbl)?;
+    summary_tbl.set("scenarios", scenarios_tbl)?;
 
     let out: Value = handle_summary.call(summary_tbl)?;
     let Value::Table(out_tbl) = out else {

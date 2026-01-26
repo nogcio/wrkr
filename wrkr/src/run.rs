@@ -46,7 +46,7 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
         .run_teardown(&run_ctx)
         .context("script Teardown failed")?;
 
-    let outputs = runtime.run_handle_summary(&run_ctx)?;
+    let outputs = runtime.run_handle_summary(&run_ctx, &summary)?;
     if let Some(outputs) = outputs {
         let cwd = std::env::current_dir().context("failed to resolve current working directory")?;
         wrkr_core::write_output_files(&cwd, &outputs.files)

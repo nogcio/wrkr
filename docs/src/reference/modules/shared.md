@@ -58,4 +58,4 @@ function Default()
 end
 ```
 
-Tip: `wrkr/check` expects the first argument to be a Lua table. If you want to check a scalar, wrap it into a table (like `ctx` above).
+Tip: `wrkr/check` accepts any Lua value. Wrapping values into a table (like `ctx` above) can make checks clearer when you want named fields.

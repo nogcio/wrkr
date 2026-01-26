@@ -78,7 +78,7 @@ If you’re proposing a larger change (new executor, new scripting engine, proto
 
 Rules (important):
 
-- No global APIs in Lua: expose everything via `require("wrkr/... ")` modules.
+- No global APIs in Lua: expose everything via `require("wrkr/...")` modules.
 - Keep runtime and editor stubs in sync:
   - Runtime implementation: `wrkr-lua/src/modules/*.rs` (registered via `package.preload`)
   - LuaLS stubs: `wrkr-lua/lua-stubs/wrkr/*.lua`

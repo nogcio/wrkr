@@ -71,7 +71,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 ## [0.0.1] - 2026-01-20
 
 ### Added
-- Lua scripting engine (`wrkr-lua`) with a small, module-based API (`require("wrkr/... ")`).
+- Lua scripting engine (`wrkr-lua`) with a small, module-based API (`require("wrkr/...")`).
 - Script contract: `options`, entrypoint `Default()`, and lifecycle hooks `Setup()`, `Teardown()`, `HandleSummary(summary)`.
 - Executors: `constant-vus`, `ramping-vus`, `ramping-arrival-rate`.
 - CLI overrides for runs: `--vus`, `--duration`, `--iterations`, `--env KEY=VALUE`, `--output`.

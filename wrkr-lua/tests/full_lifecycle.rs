@@ -26,7 +26,7 @@ async fn full_lifecycle_script_runs_setup_vus_teardown_and_handle_summary() -> R
         wrkr_core::run_scenarios(scenarios, run_ctx.clone(), wrkr_lua::run_vu, None).await?;
     wrkr_lua::run_teardown(&run_ctx)?;
 
-    let out = wrkr_lua::run_handle_summary(&run_ctx)?;
+    let out = wrkr_lua::run_handle_summary(&run_ctx, &wrkr_core::RunSummary::default())?;
     let Some(out) = out else {
         panic!("expected HandleSummary outputs");
     };
