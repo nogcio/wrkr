@@ -13,6 +13,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.7] - 2026-01-26
+
+### Added
+- HTTP: support additional methods (`PUT`, `PATCH`, `DELETE`, `HEAD`, `OPTIONS`) and a custom-method escape hatch (`http.request`).
+- gRPC: add wire encode/decode tests.
+- Tools: migrate perf comparison tooling to Python (`tools/compare-perf`) and add a coverage helper (`tools/coverage`).
+
+### Changed
+- Metrics: record and report latencies in microseconds (instead of milliseconds), including docs updates.
+- Output: improve human summary formatting and JSON (NDJSON) progress/summary output; update perf parser accordingly.
+- Core: refactor runner/metrics internals and protocol module boundaries (HTTP/gRPC extraction and cleanup).
+- Lua: update LuaLS stubs and module docs.
+
+### Fixed
+- Tools: fix summary parsing and compare logic in the perf harness.
+
 ## [0.0.6] - 2026-01-23
 
 ### Fixed
