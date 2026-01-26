@@ -118,6 +118,18 @@ wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VAL
 Notes:
 
 - CLI flags override values from the script's global `options` table.
+
+## Exit codes (wrkr run)
+
+`wrkr run` uses stable, machine-readable exit codes so CI can distinguish quality-gate failures from script/config/runtime errors:
+
+- `0` — success
+- `10` — checks failed
+- `11` — thresholds failed
+- `12` — checks + thresholds failed
+- `20` — script error (runtime raised error while executing user script)
+- `30` — invalid CLI/config/options (bad flags, invalid durations, invalid thresholds syntax, etc.)
+- `40` — internal/runtime error (IO errors, unexpected invariants)
 - Environment variables from the current process are visible to the script; use `--env KEY=VALUE` to add/override values for a single run.
 
 Examples:

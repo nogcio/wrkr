@@ -24,6 +24,17 @@ pub struct Registry {
 }
 
 impl Registry {
+    #[must_use]
+    pub fn lookup_metric(&self, name: &str) -> Option<(MetricId, MetricKind)> {
+        let name_id = self.interner.get_or_intern(name);
+
+        let defs = self.defs.read();
+        defs.iter()
+            .enumerate()
+            .find(|(_, d)| d.name == name_id)
+            .map(|(idx, d)| (MetricId(idx as u32), d.kind))
+    }
+
     pub fn register(&self, name: &str, kind: MetricKind) -> MetricId {
         let name_id = self.interner.get_or_intern(name);
 
@@ -146,6 +157,30 @@ impl Registry {
         any.then(|| crate::metrics::summarize_histogram(&acc))
     }
 
+    pub fn fold_rate_sum<P>(&self, metric: MetricId, mut predicate: P) -> (u64, u64, Option<f64>)
+    where
+        P: FnMut(&TagSet) -> bool,
+    {
+        let mut total = 0u64;
+        let mut hits = 0u64;
+
+        self.visit_series(metric, |tags, storage| {
+            if !predicate(tags) {
+                return;
+            }
+
+            let MetricStorage::Rate(r) = storage else {
+                return;
+            };
+
+            total = total.saturating_add(r.total.load(Ordering::Relaxed));
+            hits = hits.saturating_add(r.hits.load(Ordering::Relaxed));
+        });
+
+        let rate = (total > 0).then(|| hits as f64 / total as f64);
+        (total, hits, rate)
+    }
+
     pub fn summarize(&self) -> Vec<MetricSeriesSummary> {
         let mut out = Vec::new();
         let defs = self.defs.read();
@@ -223,6 +258,7 @@ impl Registry {
 mod tests {
     use super::*;
     use crate::metrics::MetricKind;
+    use std::sync::atomic::Ordering;
 
     #[test]
     fn fold_counter_sum_filters_by_tags() {
@@ -287,5 +323,55 @@ mod tests {
         assert_eq!(summary.count, 3);
         assert_eq!(summary.max, Some(30.0));
         assert_eq!(summary.min, Some(10.0));
+    }
+
+    #[test]
+    fn lookup_metric_returns_id_and_kind() {
+        let reg = Registry::default();
+        let _ = reg.register("foo", MetricKind::Counter);
+
+        let (id, kind) = match reg.lookup_metric("foo") {
+            Some(v) => v,
+            None => panic!("expected metric"),
+        };
+        assert_eq!(kind, MetricKind::Counter);
+
+        // Ensure the returned id is usable.
+        let tags = TagSet::from_sorted_iter([]);
+        let Some(MetricHandle::Counter(c)) = reg.get_handle(id, tags) else {
+            panic!("expected counter handle");
+        };
+        c.fetch_add(1, Ordering::Relaxed);
+        assert_eq!(reg.fold_counter_sum(id, |_| true), 1);
+    }
+
+    #[test]
+    fn fold_rate_sum_aggregates_series() {
+        let reg = Registry::default();
+        let m = reg.register("http_req_failed", MetricKind::Rate);
+
+        let scenario_key = reg.resolve_key("scenario");
+        let a = reg.resolve_key("A");
+        let b = reg.resolve_key("B");
+
+        let tags_a = TagSet::from_sorted_iter([(scenario_key, a)]);
+        let tags_b = TagSet::from_sorted_iter([(scenario_key, b)]);
+
+        if let Some(MetricHandle::Rate(r)) = reg.get_handle(m, tags_a) {
+            r.total.fetch_add(10, Ordering::Relaxed);
+            r.hits.fetch_add(1, Ordering::Relaxed);
+        }
+        if let Some(MetricHandle::Rate(r)) = reg.get_handle(m, tags_b) {
+            r.total.fetch_add(5, Ordering::Relaxed);
+            r.hits.fetch_add(0, Ordering::Relaxed);
+        }
+
+        let (total, hits, rate) = reg.fold_rate_sum(m, |_| true);
+        assert_eq!(total, 15);
+        assert_eq!(hits, 1);
+        let Some(rate) = rate else {
+            panic!("expected Some(rate)");
+        };
+        assert!((rate - (1.0 / 15.0)).abs() < 1e-12);
     }
 }

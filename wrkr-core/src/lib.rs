@@ -12,6 +12,7 @@ mod run;
 mod schedule;
 mod summary;
 mod thresholds;
+mod thresholds_eval;
 mod vu;
 
 pub use config::*;
@@ -27,5 +28,6 @@ pub use run::*;
 pub use schedule::{RampingU64Schedule, StageSnapshot};
 pub use summary::*;
 pub use thresholds::*;
+pub use thresholds_eval::*;
 pub use vu::*;
 pub use wrkr_metrics::{MetricKind, MetricSeriesSummary, MetricValue};
