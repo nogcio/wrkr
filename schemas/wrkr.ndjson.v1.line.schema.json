@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nogcio.github.io/wrkr/schemas/wrkr.ndjson.v1.line.schema.json",
+  "title": "wrkr NDJSON v1 line",
+  "description": "Validates a single NDJSON line emitted by `wrkr --output json`.",
+  "oneOf": [
+    { "$ref": "wrkr.ndjson.v1.progress.schema.json" },
+    { "$ref": "wrkr.ndjson.v1.summary.schema.json" }
+  ]
+}

@@ -39,6 +39,33 @@ def _format_wrkr_json_progress_line_for_ui(line: str) -> str | None:
     # Heuristic: only format wrkr NDJSON progress lines.
     if obj.get("kind") not in {None, "progress"}:
         return None
+
+    if obj.get("schema") == "wrkr.ndjson.v1":
+        try:
+            t_s = float(obj.get("elapsedSeconds"))
+            m = obj.get("metrics")
+            if not isinstance(m, dict):
+                return None
+
+            total = int(m.get("totalRequests"))
+            rps_avg = m.get("reqPerSecAvg")
+            rps = float(rps_avg) if rps_avg is not None else float(m.get("requestsPerSec"))
+
+            lat = m.get("latencySeconds")
+            if not isinstance(lat, dict):
+                return None
+            p99_ms = _sec_to_ms(float(lat.get("p99")))
+            mean_ms = _sec_to_ms(float(lat.get("mean")))
+            failed = int(m.get("checksFailedTotal"))
+        except Exception:
+            return None
+
+        return (
+            f"wrkr: t={t_s:>6.2f}s rps_avg={rps:>10.3f} p99={p99_ms:>8.3f}ms "
+            f"mean={mean_ms:>8.3f}ms failed_checks={failed} total={total}"
+        )
+
+    # Legacy NDJSON (pre v1).
     if "elapsed_secs" not in obj or "total_requests" not in obj:
         return None
 
@@ -54,7 +81,10 @@ def _format_wrkr_json_progress_line_for_ui(line: str) -> str | None:
     except Exception:
         return None
 
-    return f"wrkr: t={t:>3}s rps_avg={rps:>10.3f} p99={p99:>4}ms mean={mean:>7.3f}ms failed_checks={failed} total={total}"
+    return (
+        f"wrkr: t={t:>3}s rps_avg={rps:>10.3f} p99={p99:>4}ms "
+        f"mean={mean:>7.3f}ms failed_checks={failed} total={total}"
+    )
 
 
 def _fmt_ms_i(v: int | None) -> str:
@@ -63,6 +93,10 @@ def _fmt_ms_i(v: int | None) -> str:
 
 def _fmt_ms_f(v: float | None) -> str:
     return "-" if v is None else f"{v:.3f}"
+
+
+def _sec_to_ms(v: float | None) -> float | None:
+    return None if v is None else (v * 1000.0)
 
 
 def _fmt_int(v: int | None) -> str:
@@ -417,9 +451,9 @@ def run_http_case(
     if wrkr_json is not None:
         summary_lines.append(
             "  wrkr json: "
-            f"p50={_fmt_ms_i(wrkr_json.latency_p50_ms)}ms p90={_fmt_ms_i(wrkr_json.latency_p90_ms)}ms "
-            f"p99={_fmt_ms_i(wrkr_json.latency_p99_ms)}ms max={_fmt_ms_i(wrkr_json.latency_max_ms)}ms "
-            f"mean={_fmt_ms_f(wrkr_json.latency_mean_ms)}ms failed_checks={wrkr_json.checks_failed_total} "
+            f"p50={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p50_seconds))}ms p90={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p90_seconds))}ms "
+            f"p99={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p99_seconds))}ms max={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_max_seconds))}ms "
+            f"mean={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_mean_seconds))}ms failed_checks={wrkr_json.checks_failed_total} "
             f"rx/s={_fmt_int(wrkr_json.bytes_received_per_sec)} tx/s={_fmt_int(wrkr_json.bytes_sent_per_sec)}"
         )
     if tools.k6 is None:
@@ -645,9 +679,9 @@ def run_grpc_case(
     if wrkr_json is not None:
         summary_lines.append(
             "  wrkr json: "
-            f"p50={_fmt_ms_i(wrkr_json.latency_p50_ms)}ms p90={_fmt_ms_i(wrkr_json.latency_p90_ms)}ms "
-            f"p99={_fmt_ms_i(wrkr_json.latency_p99_ms)}ms max={_fmt_ms_i(wrkr_json.latency_max_ms)}ms "
-            f"mean={_fmt_ms_f(wrkr_json.latency_mean_ms)}ms failed_checks={wrkr_json.checks_failed_total} "
+            f"p50={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p50_seconds))}ms p90={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p90_seconds))}ms "
+            f"p99={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_p99_seconds))}ms max={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_max_seconds))}ms "
+            f"mean={_fmt_ms_f(_sec_to_ms(wrkr_json.latency_mean_seconds))}ms failed_checks={wrkr_json.checks_failed_total} "
             f"rx/s={_fmt_int(wrkr_json.bytes_received_per_sec)} tx/s={_fmt_int(wrkr_json.bytes_sent_per_sec)}"
         )
     if tools.k6 is None:

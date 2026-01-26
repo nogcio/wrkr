@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nogcio.github.io/wrkr/schemas/wrkr.ndjson.v1.summary.schema.json",
+  "title": "wrkr NDJSON v1 summary line",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "kind", "scenarios", "totals"],
+  "properties": {
+    "schema": { "const": "wrkr.ndjson.v1" },
+    "kind": { "const": "summary" },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "scenario",
+          "exec",
+          "executor",
+          "requestsTotal",
+          "failedRequestsTotal",
+          "bytesReceivedTotal",
+          "bytesSentTotal",
+          "iterationsTotal",
+          "checks",
+          "latencySeconds"
+        ],
+        "properties": {
+          "scenario": { "type": "string", "minLength": 1 },
+          "exec": { "type": ["string", "null"] },
+          "executor": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "vus",
+              "startVus",
+              "stages",
+              "startRate",
+              "timeUnitSeconds",
+              "preAllocatedVus",
+              "maxVus"
+            ],
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": ["constant-vus", "ramping-vus", "ramping-arrival-rate"]
+              },
+              "vus": { "type": ["integer", "null"], "minimum": 0 },
+              "startVus": { "type": ["integer", "null"], "minimum": 0 },
+              "stages": {
+                "type": ["array", "null"],
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["durationSeconds", "target"],
+                  "properties": {
+                    "durationSeconds": { "type": "number", "minimum": 0 },
+                    "target": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              },
+              "startRate": { "type": ["integer", "null"], "minimum": 0 },
+              "timeUnitSeconds": { "type": ["number", "null"], "minimum": 0 },
+              "preAllocatedVus": { "type": ["integer", "null"], "minimum": 0 },
+              "maxVus": { "type": ["integer", "null"], "minimum": 0 }
+            }
+          },
+
+          "requestsTotal": { "type": "integer", "minimum": 0 },
+          "failedRequestsTotal": { "type": "integer", "minimum": 0 },
+          "bytesReceivedTotal": { "type": "integer", "minimum": 0 },
+          "bytesSentTotal": { "type": "integer", "minimum": 0 },
+          "iterationsTotal": { "type": "integer", "minimum": 0 },
+
+          "checks": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": ["total", "passed", "failed", "bySeries"],
+            "properties": {
+              "total": { "type": "integer", "minimum": 0 },
+              "passed": { "type": "integer", "minimum": 0 },
+              "failed": { "type": "integer", "minimum": 0 },
+              "bySeries": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "group", "tags", "passed", "failed"],
+                  "properties": {
+                    "name": { "type": "string", "minLength": 1 },
+                    "group": { "type": ["string", "null"] },
+                    "tags": {
+                      "type": "object",
+                      "additionalProperties": { "type": "string" }
+                    },
+                    "passed": { "type": "integer", "minimum": 0 },
+                    "failed": { "type": "integer", "minimum": 0 }
+                  }
+                }
+              }
+            }
+          },
+
+          "latencySeconds": {
+            "type": ["object", "null"],
+            "additionalProperties": false,
+            "required": [
+              "p50",
+              "p75",
+              "p90",
+              "p95",
+              "p99",
+              "min",
+              "max",
+              "mean",
+              "stdev",
+              "count"
+            ],
+            "properties": {
+              "p50": { "type": ["number", "null"], "minimum": 0 },
+              "p75": { "type": ["number", "null"], "minimum": 0 },
+              "p90": { "type": ["number", "null"], "minimum": 0 },
+              "p95": { "type": ["number", "null"], "minimum": 0 },
+              "p99": { "type": ["number", "null"], "minimum": 0 },
+              "min": { "type": ["number", "null"], "minimum": 0 },
+              "max": { "type": ["number", "null"], "minimum": 0 },
+              "mean": { "type": ["number", "null"], "minimum": 0 },
+              "stdev": { "type": ["number", "null"], "minimum": 0 },
+              "count": { "type": "integer", "minimum": 0 }
+            }
+          }
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestsTotal",
+        "failedRequestsTotal",
+        "bytesReceivedTotal",
+        "bytesSentTotal",
+        "iterationsTotal",
+        "checksFailedTotal"
+      ],
+      "properties": {
+        "requestsTotal": { "type": "integer", "minimum": 0 },
+        "failedRequestsTotal": { "type": "integer", "minimum": 0 },
+        "bytesReceivedTotal": { "type": "integer", "minimum": 0 },
+        "bytesSentTotal": { "type": "integer", "minimum": 0 },
+        "iterationsTotal": { "type": "integer", "minimum": 0 },
+        "checksFailedTotal": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
