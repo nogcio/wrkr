@@ -133,8 +133,18 @@ wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 
 When using `--output json`, `wrkr` emits one JSON object per line to stdout:
 
+- every line includes `schema: "wrkr.ndjson.v1"`
 - `kind: "progress"` lines during the run
 - one final `kind: "summary"` line at the end (per-scenario + totals)
+
+JSON Schema:
+
+- [schemas/wrkr.ndjson.v1.line.schema.json](schemas/wrkr.ndjson.v1.line.schema.json)
+
+Conventions:
+
+- Keys are `camelCase`.
+- Time and latency values are in seconds (floats).
 
 ## Scripting (Lua today)
 

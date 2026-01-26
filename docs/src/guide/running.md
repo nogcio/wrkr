@@ -31,6 +31,17 @@ wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 wrkr run examples/plaintext.lua --output json
 ```
 
+`--output json` prints one JSON object per line (NDJSON):
+
+- Every line includes `schema: "wrkr.ndjson.v1"` and a `kind` discriminator.
+- `kind: "progress"` lines are emitted periodically during the run.
+- A final `kind: "summary"` line is emitted at the end.
+- JSON keys are camelCase; time/latency values are seconds as floats (e.g. `elapsedSeconds`, `intervalSeconds`, `latencySeconds`).
+
+JSON Schema:
+
+- https://github.com/nogcio/wrkr/blob/main/schemas/wrkr.ndjson.v1.line.schema.json
+
 ## Local test server (repo)
 
 If you’re working in this repository, you can run a local test server used by examples:

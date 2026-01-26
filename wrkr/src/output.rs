@@ -17,6 +17,6 @@ pub(crate) trait OutputFormatter: Send + Sync {
 pub(crate) fn formatter(format: OutputFormat) -> Box<dyn OutputFormatter> {
     match format {
         OutputFormat::HumanReadable => Box::new(human::HumanReadableOutput::new()),
-        OutputFormat::Json => Box::new(json::JsonOutput),
+        OutputFormat::Json => Box::new(json::JsonOutput::new()),
     }
 }

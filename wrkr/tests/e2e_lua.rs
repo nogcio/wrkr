@@ -55,14 +55,26 @@ async fn e2e_lua_runs_for_2s_and_sends_requests() -> anyhow::Result<()> {
                 saw_progress = true;
                 last_progress_line = line.to_string();
                 anyhow::ensure!(
-                    v.get("elapsed_secs").is_some(),
-                    "expected a progress json object with `elapsed_secs` key\nstdout:\n{}\nstderr:\n{}",
+                    v.get("schema").and_then(serde_json::Value::as_str) == Some("wrkr.ndjson.v1"),
+                    "expected a progress json object with schema=wrkr.ndjson.v1\nstdout:\n{}\nstderr:\n{}",
+                    stdout,
+                    stderr
+                );
+                anyhow::ensure!(
+                    v.get("elapsedSeconds").is_some(),
+                    "expected a progress json object with `elapsedSeconds` key\nstdout:\n{}\nstderr:\n{}",
                     stdout,
                     stderr
                 );
             }
             Some("summary") => {
                 saw_summary = true;
+                anyhow::ensure!(
+                    v.get("schema").and_then(serde_json::Value::as_str) == Some("wrkr.ndjson.v1"),
+                    "expected a summary json object with schema=wrkr.ndjson.v1\nstdout:\n{}\nstderr:\n{}",
+                    stdout,
+                    stderr
+                );
                 anyhow::ensure!(
                     v.get("totals").is_some(),
                     "expected a summary json object with `totals` key\nstdout:\n{}\nstderr:\n{}",

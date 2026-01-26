@@ -1,0 +1,133 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://nogcio.github.io/wrkr/schemas/wrkr.ndjson.v1.progress.schema.json",
+  "title": "wrkr NDJSON v1 progress line",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "kind",
+    "tick",
+    "elapsedSeconds",
+    "intervalSeconds",
+    "scenario",
+    "exec",
+    "executor",
+    "metrics"
+  ],
+  "properties": {
+    "schema": {
+      "const": "wrkr.ndjson.v1"
+    },
+    "kind": {
+      "const": "progress"
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "elapsedSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "intervalSeconds": {
+      "type": "number",
+      "minimum": 0
+    },
+    "scenario": {
+      "type": "string",
+      "minLength": 1
+    },
+    "exec": {
+      "type": "string",
+      "minLength": 1
+    },
+    "executor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "vusActive", "vusMax", "droppedIterationsTotal"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["constant-vus", "ramping-vus", "ramping-arrival-rate"]
+        },
+        "vusActive": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "vusMax": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        },
+        "droppedIterationsTotal": {
+          "type": ["integer", "null"],
+          "minimum": 0
+        }
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requestsPerSec",
+        "bytesReceivedPerSec",
+        "bytesSentPerSec",
+        "totalRequests",
+        "totalFailedRequests",
+        "totalIterations",
+        "totalBytesReceived",
+        "totalBytesSent",
+        "checksFailedTotal",
+        "latencySeconds",
+        "reqPerSecAvg",
+        "reqPerSecStdev",
+        "reqPerSecMax",
+        "reqPerSecStdevPct"
+      ],
+      "properties": {
+        "requestsPerSec": { "type": "number", "minimum": 0 },
+        "bytesReceivedPerSec": { "type": "integer", "minimum": 0 },
+        "bytesSentPerSec": { "type": "integer", "minimum": 0 },
+
+        "totalRequests": { "type": "integer", "minimum": 0 },
+        "totalFailedRequests": { "type": "integer", "minimum": 0 },
+        "totalIterations": { "type": "integer", "minimum": 0 },
+
+        "totalBytesReceived": { "type": "integer", "minimum": 0 },
+        "totalBytesSent": { "type": "integer", "minimum": 0 },
+
+        "checksFailedTotal": { "type": "integer", "minimum": 0 },
+
+        "latencySeconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "mean",
+            "stdev",
+            "max",
+            "p50",
+            "p75",
+            "p90",
+            "p99",
+            "stdevPct"
+          ],
+          "properties": {
+            "mean": { "type": "number", "minimum": 0 },
+            "stdev": { "type": "number", "minimum": 0 },
+            "max": { "type": "number", "minimum": 0 },
+            "p50": { "type": "number", "minimum": 0 },
+            "p75": { "type": "number", "minimum": 0 },
+            "p90": { "type": "number", "minimum": 0 },
+            "p99": { "type": "number", "minimum": 0 },
+            "stdevPct": { "type": "number", "minimum": 0 }
+          }
+        },
+
+        "reqPerSecAvg": { "type": "number", "minimum": 0 },
+        "reqPerSecStdev": { "type": "number", "minimum": 0 },
+        "reqPerSecMax": { "type": "number", "minimum": 0 },
+        "reqPerSecStdevPct": { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}

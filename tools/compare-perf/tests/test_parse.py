@@ -64,8 +64,8 @@ def test_try_parse_wrkr_json_summary() -> None:
     out = _read_fixture("wrkr_json_stdout.ndjson")
     s = try_parse_wrkr_json_summary(stdout=out, stderr="")
     assert s is not None
-    assert s.elapsed_secs == 5
+    assert s.elapsed_seconds == pytest.approx(5.0)
     assert s.total_requests == 600
     assert s.rps == pytest.approx(120.0)
     assert s.checks_failed_total == 0
-    assert s.latency_p99_ms == 9
+    assert s.latency_p99_seconds == pytest.approx(0.009)

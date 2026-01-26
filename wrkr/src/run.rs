@@ -62,11 +62,7 @@ pub async fn run(args: RunArgs) -> anyhow::Result<()> {
         }
     }
 
-    let metric_series = if matches!(args.output, OutputFormat::HumanReadable) {
-        Some(run_ctx.metrics.summarize())
-    } else {
-        None
-    };
+    let metric_series = Some(run_ctx.metrics.summarize());
 
     out.print_summary(&summary, metric_series.as_deref())?;
     Ok(())

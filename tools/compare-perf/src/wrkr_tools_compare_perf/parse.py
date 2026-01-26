@@ -123,7 +123,7 @@ def parse_wrkr_rps(*, stdout: str, stderr: str, test_duration_seconds: float | N
 
     Supported formats (matching legacy + current behavior):
     0) JSON progress lines (NDJSON) emitted by `wrkr --output json`:
-        {"elapsed_secs": 1, "total_requests": 123, "req_per_sec_avg": 123.0, ...}
+        {"schema":"wrkr.ndjson.v1","kind":"progress", ...}
     1) Legacy:
         rps: 1234
     2) k6-like summary lines:
@@ -145,8 +145,8 @@ def parse_wrkr_rps(*, stdout: str, stderr: str, test_duration_seconds: float | N
             return Rps(float(js.total_requests) / float(test_duration_seconds))
 
         # Otherwise, best-effort derive average from observed elapsed time.
-        if js.elapsed_secs > 0:
-            return Rps(float(js.total_requests) / float(js.elapsed_secs))
+        if js.elapsed_seconds > 0:
+            return Rps(float(js.total_requests) / float(js.elapsed_seconds))
         return Rps(js.rps)
 
     try:
@@ -214,29 +214,29 @@ def _parse_wrkr_rps_text(text: str) -> Rps:
 
 @dataclass(frozen=True, slots=True)
 class WrkrJsonSummary:
-        """Summary extracted from wrkr NDJSON output.
+    """Summary extracted from wrkr NDJSON output.
 
-        `wrkr --output json` emits:
-            - `kind="progress"` lines during the run
-            - a final `kind="summary"` line at the end
+    `wrkr --output json` emits:
+        - `kind="progress"` lines during the run
+        - a final `kind="summary"` line at the end
 
-        We combine the last progress line (for rates) with the final summary line
-        (for totals and latency percentiles where available).
-        """
+    We combine the last progress line (for rates) with the final summary line
+    (for totals and latency percentiles where available).
+    """
 
-        elapsed_secs: int
-        total_requests: int
-        rps: float
+    elapsed_seconds: float
+    total_requests: int
+    rps: float
 
-        checks_failed_total: int
-        latency_mean_ms: float | None
-        latency_p50_ms: int | None
-        latency_p90_ms: int | None
-        latency_p99_ms: int | None
-        latency_max_ms: int | None
+    checks_failed_total: int
+    latency_mean_seconds: float | None
+    latency_p50_seconds: float | None
+    latency_p90_seconds: float | None
+    latency_p99_seconds: float | None
+    latency_max_seconds: float | None
 
-        bytes_received_per_sec: int | None
-        bytes_sent_per_sec: int | None
+    bytes_received_per_sec: int | None
+    bytes_sent_per_sec: int | None
 
 
 def try_parse_wrkr_json_summary(*, stdout: str, stderr: str) -> WrkrJsonSummary | None:
@@ -263,9 +263,7 @@ def try_parse_wrkr_json_summary(*, stdout: str, stderr: str) -> WrkrJsonSummary 
                 kind is None and "elapsed_secs" in obj and "total_requests" in obj
             ):
                 last_progress = obj
-            elif kind == "summary" or (
-                kind is None and "totals" in obj and "scenarios" in obj
-            ):
+            elif kind == "summary" or (kind is None and "totals" in obj and "scenarios" in obj):
                 last_summary = obj
 
     if last_progress is None and last_summary is None:
@@ -302,7 +300,7 @@ def _parse_wrkr_json_summary_obj(
 ) -> WrkrJsonSummary:
     try:
         # ---- Rates from progress ----
-        elapsed_secs: int
+        elapsed_seconds: float
         rps_avg: float
         bytes_received_per_sec: int | None
         bytes_sent_per_sec: int | None
@@ -311,38 +309,75 @@ def _parse_wrkr_json_summary_obj(
             # We cannot compute RPS from summary alone (no rates there).
             raise ParseError("wrkr json: missing progress line (kind=progress)")
 
-        elapsed_secs = _json_int(progress, "elapsed_secs")
+        if progress.get("schema") == "wrkr.ndjson.v1":
+            elapsed_seconds = _json_float(progress, "elapsedSeconds") or 0.0
 
-        # Prefer explicit average if present.
-        rps_avg_opt = _json_float(progress, "req_per_sec_avg", default=None)
-        if rps_avg_opt is not None:
-            rps_avg = rps_avg_opt
-        else:
-            # Derive from totals if we can, otherwise fall back to instantaneous rps.
-            total_requests_progress = _json_int(progress, "total_requests")
-            if elapsed_secs > 0:
-                rps_avg = float(total_requests_progress) / float(elapsed_secs)
+            m = _json_obj(progress, "metrics")
+
+            rps_avg_opt = _json_float(m, "reqPerSecAvg", default=None)
+            if rps_avg_opt is not None:
+                rps_avg = rps_avg_opt
             else:
-                rps_avg = _json_float(progress, "requests_per_sec") or 0.0
+                total_requests_progress = _json_int(m, "totalRequests")
+                if elapsed_seconds > 0.0:
+                    rps_avg = float(total_requests_progress) / float(elapsed_seconds)
+                else:
+                    rps_avg = _json_float(m, "requestsPerSec") or 0.0
 
-        bytes_received_per_sec = _json_int(progress, "bytes_received_per_sec")
-        bytes_sent_per_sec = _json_int(progress, "bytes_sent_per_sec")
+            bytes_received_per_sec = _json_int(m, "bytesReceivedPerSec")
+            bytes_sent_per_sec = _json_int(m, "bytesSentPerSec")
+        else:
+            elapsed_secs = _json_int(progress, "elapsed_secs")
+            elapsed_seconds = float(elapsed_secs)
+
+            # Prefer explicit average if present.
+            rps_avg_opt = _json_float(progress, "req_per_sec_avg", default=None)
+            if rps_avg_opt is not None:
+                rps_avg = rps_avg_opt
+            else:
+                # Derive from totals if we can, otherwise fall back to instantaneous rps.
+                total_requests_progress = _json_int(progress, "total_requests")
+                if elapsed_secs > 0:
+                    rps_avg = float(total_requests_progress) / float(elapsed_secs)
+                else:
+                    rps_avg = _json_float(progress, "requests_per_sec") or 0.0
+
+            bytes_received_per_sec = _json_int(progress, "bytes_received_per_sec")
+            bytes_sent_per_sec = _json_int(progress, "bytes_sent_per_sec")
 
         # ---- Totals & percentiles: prefer final summary ----
         total_requests: int
         checks_failed_total: int
-        latency_mean_ms: float | None
-        latency_p50_ms: int | None
-        latency_p90_ms: int | None
-        latency_p99_ms: int | None
-        latency_max_ms: int | None
+        latency_mean_seconds: float | None
+        latency_p50_seconds: float | None
+        latency_p90_seconds: float | None
+        latency_p99_seconds: float | None
+        latency_max_seconds: float | None
 
-        if summary is not None:
+        if summary is not None and summary.get("schema") == "wrkr.ndjson.v1":
+            totals = _json_obj(summary, "totals")
+            total_requests = _json_int(totals, "requestsTotal")
+            checks_failed_total = _json_int(totals, "checksFailedTotal")
+
+            scenarios = _json_list(summary, "scenarios")
+            latency = None
+            if scenarios:
+                first = scenarios[0]
+                if isinstance(first, dict):
+                    lat = first.get("latencySeconds")
+                    if isinstance(lat, dict):
+                        latency = lat
+
+            latency_mean_seconds = _json_float(latency, "mean", default=None) if latency else None
+            latency_p50_seconds = _json_float(latency, "p50", default=None) if latency else None
+            latency_p90_seconds = _json_float(latency, "p90", default=None) if latency else None
+            latency_p99_seconds = _json_float(latency, "p99", default=None) if latency else None
+            latency_max_seconds = _json_float(latency, "max", default=None) if latency else None
+        elif summary is not None:
             totals = _json_obj(summary, "totals")
             total_requests = _json_int(totals, "requests_total")
             checks_failed_total = _json_int(totals, "checks_failed_total")
 
-            # Best-effort: use the first scenario latency if present.
             scenarios = _json_list(summary, "scenarios")
             latency = None
             if scenarios:
@@ -352,37 +387,46 @@ def _parse_wrkr_json_summary_obj(
                     if isinstance(lat, dict):
                         latency = lat
 
-            latency_mean_ms = _json_float(latency, "mean", default=None) if latency else None
-            latency_p50_ms = (
-                _ms_round_int(_json_float(latency, "p50", default=None))
-                if latency
+            # Legacy fixtures used milliseconds.
+            latency_mean_seconds = (
+                (_json_float(latency, "mean", default=None) / 1000.0)
+                if latency and _json_float(latency, "mean", default=None) is not None
                 else None
             )
-            latency_p90_ms = (
-                _ms_round_int(_json_float(latency, "p90", default=None))
-                if latency
+            latency_p50_seconds = (
+                (_json_float(latency, "p50", default=None) / 1000.0)
+                if latency and _json_float(latency, "p50", default=None) is not None
                 else None
             )
-            latency_p99_ms = (
-                _ms_round_int(_json_float(latency, "p99", default=None))
-                if latency
+            latency_p90_seconds = (
+                (_json_float(latency, "p90", default=None) / 1000.0)
+                if latency and _json_float(latency, "p90", default=None) is not None
                 else None
             )
-            latency_max_ms = (
-                _ms_round_int(_json_float(latency, "max", default=None))
-                if latency
+            latency_p99_seconds = (
+                (_json_float(latency, "p99", default=None) / 1000.0)
+                if latency and _json_float(latency, "p99", default=None) is not None
+                else None
+            )
+            latency_max_seconds = (
+                (_json_float(latency, "max", default=None) / 1000.0)
+                if latency and _json_float(latency, "max", default=None) is not None
                 else None
             )
         else:
-            # Back-compat: derive totals from progress line.
             total_requests = _json_int(progress, "total_requests")
             checks_failed_total = _json_int(progress, "checks_failed_total")
 
-            latency_mean_ms = _json_float(progress, "latency_mean", default=None)
-            latency_p50_ms = _json_int(progress, "latency_p50")
-            latency_p90_ms = _json_int(progress, "latency_p90")
-            latency_p99_ms = _json_int(progress, "latency_p99")
-            latency_max_ms = _json_int(progress, "latency_max")
+            # Legacy progress fields are microseconds.
+            latency_mean_seconds = (
+                (_json_float(progress, "latency_mean", default=None) / 1_000_000.0)
+                if _json_float(progress, "latency_mean", default=None) is not None
+                else None
+            )
+            latency_p50_seconds = float(_json_int(progress, "latency_p50")) / 1_000_000.0
+            latency_p90_seconds = float(_json_int(progress, "latency_p90")) / 1_000_000.0
+            latency_p99_seconds = float(_json_int(progress, "latency_p99")) / 1_000_000.0
+            latency_max_seconds = float(_json_int(progress, "latency_max")) / 1_000_000.0
     except ParseError as e:
         diag = ParseDiagnostics(
             kind="wrkr-json",
@@ -396,15 +440,15 @@ def _parse_wrkr_json_summary_obj(
         raise ParseError(f"wrkr json: rps must be non-negative, got {rps_avg!r}")
 
     return WrkrJsonSummary(
-        elapsed_secs=elapsed_secs,
+        elapsed_seconds=float(elapsed_seconds),
         total_requests=total_requests,
         rps=float(rps_avg),
         checks_failed_total=checks_failed_total,
-        latency_mean_ms=None if latency_mean_ms is None else float(latency_mean_ms),
-        latency_p50_ms=latency_p50_ms,
-        latency_p90_ms=latency_p90_ms,
-        latency_p99_ms=latency_p99_ms,
-        latency_max_ms=latency_max_ms,
+        latency_mean_seconds=None if latency_mean_seconds is None else float(latency_mean_seconds),
+        latency_p50_seconds=None if latency_p50_seconds is None else float(latency_p50_seconds),
+        latency_p90_seconds=None if latency_p90_seconds is None else float(latency_p90_seconds),
+        latency_p99_seconds=None if latency_p99_seconds is None else float(latency_p99_seconds),
+        latency_max_seconds=None if latency_max_seconds is None else float(latency_max_seconds),
         bytes_received_per_sec=bytes_received_per_sec,
         bytes_sent_per_sec=bytes_sent_per_sec,
     )
@@ -474,7 +518,7 @@ def _ms_round_int(v: float | None) -> int | None:
         return None
     if v < 0.0:
         return None
-    return int(round(v))
+    return round(v)
 
 
 def parse_k6_http_rps(*, stdout: str, stderr: str) -> Rps:

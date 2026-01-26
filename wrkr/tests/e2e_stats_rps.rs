@@ -8,31 +8,50 @@ use wrkr_testserver::TestServer;
 
 #[derive(Debug, Clone, Copy)]
 struct ProgressSample {
-    elapsed_secs: u64,
-    interval_secs: f64,
+    elapsed_seconds: f64,
+    interval_seconds: f64,
     requests_per_sec: f64,
     total_requests: u64,
 }
 
 #[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct Totals {
     requests_total: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProgressMetrics {
+    requests_per_sec: f64,
+    req_per_sec_avg: f64,
+    total_requests: u64,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ProgressLine {
+    schema: String,
+    elapsed_seconds: f64,
+    interval_seconds: f64,
+    metrics: ProgressMetrics,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SummaryLine {
+    schema: String,
+    totals: Totals,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(tag = "kind")]
 enum JsonLine {
     #[serde(rename = "progress")]
-    Progress {
-        elapsed_secs: u64,
-        interval_secs: f64,
-        requests_per_sec: f64,
-        req_per_sec_avg: f64,
-        total_requests: u64,
-    },
+    Progress(ProgressLine),
 
     #[serde(rename = "summary")]
-    Summary { totals: Totals },
+    Summary(SummaryLine),
 }
 
 #[tokio::test]
@@ -81,7 +100,7 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
     );
 
     let mut progress_samples: Vec<ProgressSample> = Vec::new();
-    let mut best_progress: Option<(u64, f64, f64, u64)> = None; // (elapsed_secs, requests_per_sec, req_per_sec_avg, total_requests)
+    let mut best_progress: Option<(f64, f64, f64, u64)> = None; // (elapsed_seconds, requests_per_sec, req_per_sec_avg, total_requests)
     let mut summary_requests_total: Option<u64> = None;
 
     for line in stdout.lines().filter(|l| !l.trim().is_empty()) {
@@ -89,51 +108,56 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
             .with_context(|| format!("failed to parse json line: {line}"))?;
 
         match parsed {
-            JsonLine::Progress {
-                elapsed_secs,
-                interval_secs,
-                requests_per_sec,
-                req_per_sec_avg,
-                total_requests,
-            } => {
-                if elapsed_secs == 0 {
+            JsonLine::Progress(p) => {
+                anyhow::ensure!(
+                    p.schema == "wrkr.ndjson.v1",
+                    "unexpected schema in progress line: {}",
+                    p.schema
+                );
+
+                if p.elapsed_seconds <= 0.0 {
                     continue;
                 }
 
                 progress_samples.push(ProgressSample {
-                    elapsed_secs,
-                    interval_secs,
-                    requests_per_sec,
-                    total_requests,
+                    elapsed_seconds: p.elapsed_seconds,
+                    interval_seconds: p.interval_seconds,
+                    requests_per_sec: p.metrics.requests_per_sec,
+                    total_requests: p.metrics.total_requests,
                 });
 
                 match best_progress {
                     None => {
                         best_progress = Some((
-                            elapsed_secs,
-                            requests_per_sec,
-                            req_per_sec_avg,
-                            total_requests,
+                            p.elapsed_seconds,
+                            p.metrics.requests_per_sec,
+                            p.metrics.req_per_sec_avg,
+                            p.metrics.total_requests,
                         ));
                     }
-                    Some((best_elapsed, ..)) if elapsed_secs > best_elapsed => {
+                    Some((best_elapsed, ..)) if p.elapsed_seconds > best_elapsed => {
                         best_progress = Some((
-                            elapsed_secs,
-                            requests_per_sec,
-                            req_per_sec_avg,
-                            total_requests,
+                            p.elapsed_seconds,
+                            p.metrics.requests_per_sec,
+                            p.metrics.req_per_sec_avg,
+                            p.metrics.total_requests,
                         ));
                     }
                     Some(_) => {}
                 }
             }
-            JsonLine::Summary { totals } => {
-                summary_requests_total = Some(totals.requests_total);
+            JsonLine::Summary(s) => {
+                anyhow::ensure!(
+                    s.schema == "wrkr.ndjson.v1",
+                    "unexpected schema in summary line: {}",
+                    s.schema
+                );
+                summary_requests_total = Some(s.totals.requests_total);
             }
         }
     }
 
-    let (elapsed_secs, wrkr_rps_now, wrkr_rps_avg, wrkr_total_requests) = best_progress
+    let (elapsed_seconds, wrkr_rps_now, wrkr_rps_avg, wrkr_total_requests) = best_progress
         .with_context(|| {
             format!(
                 "expected at least one progress json line\nstdout:\n{stdout}\nstderr:\n{stderr}"
@@ -157,12 +181,12 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
     // Sanity: totals should match what the server observed.
     anyhow::ensure!(
         summary_total_requests == server_seen,
-        "request totals mismatch\nwrkr_summary_requests_total={summary_total_requests}\nserver_seen={server_seen}\nprogress_total_requests={wrkr_total_requests}\nelapsed_secs={elapsed_secs}\nwall_elapsed={wall:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "request totals mismatch\nwrkr_summary_requests_total={summary_total_requests}\nserver_seen={server_seen}\nprogress_total_requests={wrkr_total_requests}\nelapsed_seconds={elapsed_seconds}\nwall_elapsed={wall:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
     // Internal consistency: integrating the live per-second rate should approximately match
     // the reported live `total_requests` at the last progress tick.
-    progress_samples.sort_by_key(|s| s.elapsed_secs);
+    progress_samples.sort_by(|a, b| a.elapsed_seconds.total_cmp(&b.elapsed_seconds));
     anyhow::ensure!(
         !progress_samples.is_empty(),
         "expected progress samples\nstdout:\n{stdout}\nstderr:\n{stderr}"
@@ -170,14 +194,14 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
 
     let mut integrated_requests = 0.0_f64;
     let mut integrated_secs = 0.0_f64;
-    let mut prev_elapsed = 0_u64;
+    let mut prev_elapsed = 0.0_f64;
     let mut prev_total = 0_u64;
 
     for s in &progress_samples {
         anyhow::ensure!(
-            s.elapsed_secs > prev_elapsed,
-            "expected monotonic elapsed_secs in progress\nprev_elapsed={prev_elapsed}\nelapsed_secs={}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-            s.elapsed_secs
+            s.elapsed_seconds > prev_elapsed,
+            "expected monotonic elapsedSeconds in progress\nprev_elapsed={prev_elapsed}\nelapsed_seconds={}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            s.elapsed_seconds
         );
         anyhow::ensure!(
             s.total_requests >= prev_total,
@@ -185,18 +209,18 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
             s.total_requests
         );
 
-        let delta_secs = s.elapsed_secs - prev_elapsed;
-        // interval_secs comes from wrkr itself; elapsed_secs is truncated to whole seconds.
+        let delta_secs = s.elapsed_seconds - prev_elapsed;
+        // intervalSeconds comes from wrkr itself.
         // Expect these to be close enough to detect bugs without being flaky.
         anyhow::ensure!(
-            (s.interval_secs - (delta_secs as f64)).abs() <= 0.5,
-            "unexpected interval duration\ninterval_secs={}\ndelta_secs={delta_secs}\nstdout:\n{stdout}\nstderr:\n{stderr}",
-            s.interval_secs
+            (s.interval_seconds - delta_secs).abs() <= 0.5,
+            "unexpected interval duration\ninterval_seconds={}\ndelta_secs={delta_secs}\nstdout:\n{stdout}\nstderr:\n{stderr}",
+            s.interval_seconds
         );
 
-        integrated_requests += s.requests_per_sec * s.interval_secs;
-        integrated_secs += s.interval_secs;
-        prev_elapsed = s.elapsed_secs;
+        integrated_requests += s.requests_per_sec * s.interval_seconds;
+        integrated_secs += s.interval_seconds;
+        prev_elapsed = s.elapsed_seconds;
         prev_total = s.total_requests;
     }
 
@@ -220,7 +244,7 @@ async fn e2e_stats_rps_matches_server_observed_rps() -> anyhow::Result<()> {
 
     anyhow::ensure!(
         rel_err <= 0.005 || abs_err <= 1.0,
-        "rps mismatch\nwrkr_requests_per_sec={wrkr_rps_now}\nwrkr_req_per_sec_avg={wrkr_rps_avg}\nexpected_avg_rps={fact_rps}\nabs_err={abs_err}\nrel_err={rel_err}\nserver_seen={server_seen}\nelapsed_secs={elapsed_secs}\nprogress_elapsed_secs={integrated_secs}\nwall_elapsed={wall:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
+        "rps mismatch\nwrkr_requests_per_sec={wrkr_rps_now}\nwrkr_req_per_sec_avg={wrkr_rps_avg}\nexpected_avg_rps={fact_rps}\nabs_err={abs_err}\nrel_err={rel_err}\nserver_seen={server_seen}\nelapsed_seconds={elapsed_seconds}\nprogress_elapsed_seconds={integrated_secs}\nwall_elapsed={wall:?}\nstdout:\n{stdout}\nstderr:\n{stderr}"
     );
 
     Ok(())
