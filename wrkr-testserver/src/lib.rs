@@ -7,7 +7,7 @@ use axum::Router;
 use axum::body::Bytes;
 use axum::extract::{Query, State};
 use axum::http::{HeaderMap, StatusCode};
-use axum::routing::{get, post};
+use axum::routing::{any, get, post};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::oneshot;
@@ -250,7 +250,7 @@ pub fn router(stats: TestServerStats) -> Router {
         .route(PATH_HELLO, get(handle_hello))
         .route(PATH_PLAINTEXT, get(handle_plaintext))
         .route(PATH_SLOW, get(handle_slow))
-        .route(PATH_ECHO, post(handle_echo))
+        .route(PATH_ECHO, any(handle_echo))
         .route(PATH_ANALYTICS_AGGREGATE, post(handle_analytics_aggregate))
         .route(PATH_QP, get(handle_qp))
         .with_state(stats)
