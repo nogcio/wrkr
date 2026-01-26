@@ -1,0 +1,56 @@
+{
+  "name": "wrkr (devcontainer)",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "runArgs": [
+    "--cap-add=SYS_PTRACE",
+    "--cap-add=SYS_ADMIN",
+    "--security-opt=seccomp=unconfined"
+  ],
+  "remoteUser": "vscode",
+  "postCreateCommand": "bash .devcontainer/postCreate.sh",
+  "forwardPorts": [12345, 50051],
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "rust-analyzer.checkOnSave": true,
+        "rust-analyzer.check.command": "clippy",
+        "rust-analyzer.cargo.allFeatures": true,
+        "[rust]": {
+          "editor.defaultFormatter": "rust-lang.rust-analyzer",
+          "editor.formatOnSave": true
+        },
+        "[toml]": {
+          "editor.formatOnSave": true
+        },
+        "files.watcherExclude": {
+          "**/target/**": true,
+          "**/.venv/**": true
+        },
+        "search.exclude": {
+          "**/target/**": true
+        },
+        "chat.tools.terminal.autoApprove": {
+          "cargo clippy": true,
+          "cargo fmt": true,
+          "uv": true,
+          "make": true,
+          ".venv/bin/wrkr-tools-profile": true
+        },
+        "makefile.configureOnOpen": false
+      },
+      "extensions": [
+        "rust-lang.rust-analyzer",
+        "vadimcn.vscode-lldb",
+        "tomblind.local-lua-debugger-vscode",
+        "tamasfe.even-better-toml",
+        "redhat.vscode-yaml",
+        "streetsidesoftware.code-spell-checker",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "sumneko.lua"
+      ]
+    }
+  }
+}

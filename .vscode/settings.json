@@ -1,27 +1,5 @@
 {
-    // Rust
-    "rust-analyzer.checkOnSave": true,
-    "rust-analyzer.check.command": "clippy",
-    "[rust]": {
-        "editor.defaultFormatter": "rust-lang.rust-analyzer",
-        "editor.formatOnSave": true
-    },
-    "[toml]": {
-        "editor.formatOnSave": true
-    },
-
-    // Keep search/indexing fast in this repo
-    "files.watcherExclude": {
-        "**/target/**": true,
-    },
-    "search.exclude": {
-        "**/target/**": true,
-    },
-    "chat.tools.terminal.autoApprove": {
-        "cargo clippy": true,
-        "cargo fmt": true,
-        "uv": true,
-        "make": true
-    },
-    "makefile.configureOnOpen": false
+    // Intentionally minimal.
+    // This repo uses `.devcontainer/devcontainer.json` as the source of truth for
+    // VS Code settings and extension installation.
 }

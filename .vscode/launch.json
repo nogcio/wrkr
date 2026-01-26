@@ -14,7 +14,7 @@
             "id": "wrkr_base_url",
             "type": "promptString",
             "description": "BASE_URL for the script",
-            "default": "http://127.0.0.1:8080"
+            "default": "http://127.0.0.1:12345"
         }
     ],
     "configurations": [

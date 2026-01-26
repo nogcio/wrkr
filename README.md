@@ -14,6 +14,28 @@ Today, `wrkr` is script-driven via Lua (see [`wrkr-lua/README.md`](wrkr-lua/READ
 
 ## Install
 
+### Install script (Linux + macOS)
+
+This installs the `wrkr` binary from GitHub Releases. It does not install system dependencies.
+
+Install the latest release:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nogcio/wrkr/main/install.sh | sh
+```
+
+Install a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nogcio/wrkr/main/install.sh | sh -s -- --version vX.Y.Z
+```
+
+Install to a custom directory:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nogcio/wrkr/main/install.sh | sh -s -- --dir "$HOME/.local/bin"
+```
+
 ### Homebrew (macOS)
 
 Install via Homebrew tap (no Rust toolchain required):
@@ -213,6 +235,24 @@ Or via `make`:
 make check
 make run SCRIPT=examples/plaintext.lua BASE_URL=https://example.com WRKR_RUN_ARGS='--vus 50 --duration 10s'
 ```
+
+### Devcontainer (VS Code / Codespaces)
+
+This repo includes a devcontainer under `.devcontainer/`.
+
+On first launch, the container installs system deps (LuaJIT headers + `protoc`), Rust toolchain `1.92.0`, and sets up Python tooling via `uv`.
+
+Common commands in the devcontainer:
+
+```bash
+make check
+make testserver
+make run SCRIPT=examples/plaintext.lua BASE_URL=http://127.0.0.1:12345
+```
+
+Notes:
+
+- For CPU profiling on Linux via `perf` (used by `make tools-profile-grpc`), see `.devcontainer/README.md` for required Docker run args + host `sysctl`.
 
 ## Contributing
 

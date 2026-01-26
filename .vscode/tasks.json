@@ -11,7 +11,7 @@
 			"id": "wrkr_base_url",
 			"type": "promptString",
 			"description": "BASE_URL for scripts",
-			"default": "http://localhost:54320"
+			"default": "http://127.0.0.1:12345"
 		}
 	],
 	"tasks": [
@@ -64,7 +64,7 @@
 		{
 			"label": "run: wrkr (release, grpc_aggregate, diag vu_active)",
 			"type": "shell",
-			"command": "WRKR_DIAG_VU_ACTIVE=1 cargo run -p wrkr --release -- run ./examples/grpc_aggregate.lua --env BASE_URL=http://127.0.0.1:54320",
+			"command": "WRKR_DIAG_VU_ACTIVE=1 cargo run -p wrkr --release -- run ./examples/grpc_aggregate.lua --env BASE_URL=http://127.0.0.1:12345",
 			"isBackground": false,
 			"problemMatcher": []
 		}
