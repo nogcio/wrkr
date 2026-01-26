@@ -117,7 +117,7 @@ def _parse_wrk_socket_errors_line(line: str) -> list[str]:
     return out
 
 
-def parse_wrkr_rps(*, stdout: str, stderr: str) -> Rps:
+def parse_wrkr_rps(*, stdout: str, stderr: str, test_duration_seconds: float | None = None) -> Rps:
     """
     Parse wrkr RPS from stdout/stderr.
 
@@ -135,6 +135,18 @@ def parse_wrkr_rps(*, stdout: str, stderr: str) -> Rps:
     # Prefer machine-readable NDJSON when present.
     js = try_parse_wrkr_json_summary(stdout=stdout, stderr=stderr)
     if js is not None:
+        # If we know the intended test duration, compute average RPS from final totals.
+        # This avoids relying on the last progress line rate and keeps compare-perf consistent.
+        if test_duration_seconds is not None:
+            if test_duration_seconds <= 0.0:
+                raise ParseError(
+                    f"test_duration_seconds must be > 0 when provided, got {test_duration_seconds!r}"
+                )
+            return Rps(float(js.total_requests) / float(test_duration_seconds))
+
+        # Otherwise, best-effort derive average from observed elapsed time.
+        if js.elapsed_secs > 0:
+            return Rps(float(js.total_requests) / float(js.elapsed_secs))
         return Rps(js.rps)
 
     try:

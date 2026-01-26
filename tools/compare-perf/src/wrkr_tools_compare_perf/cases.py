@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .config import Config
+from .config import Config, parse_duration_to_seconds
 from .exec import RunResult, run_with_peak_rss_sampling_streaming
 from .parse import (
     ParseError,
@@ -329,7 +329,11 @@ def run_http_case(
     wrkr_rps: Rps | None
     wrkr_json = try_parse_wrkr_json_summary(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     try:
-        wrkr_rps = parse_wrkr_rps(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
+        wrkr_rps = parse_wrkr_rps(
+            stdout=wrkr_res.stdout,
+            stderr=wrkr_res.stderr,
+            test_duration_seconds=parse_duration_to_seconds(cfg.tuning.duration),
+        )
     except ParseError as e:
         wrkr_rps = None
         wrkr_ok = False
@@ -539,7 +543,11 @@ def run_grpc_case(
     wrkr_rps: Rps | None
     wrkr_json = try_parse_wrkr_json_summary(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
     try:
-        wrkr_rps = parse_wrkr_rps(stdout=wrkr_res.stdout, stderr=wrkr_res.stderr)
+        wrkr_rps = parse_wrkr_rps(
+            stdout=wrkr_res.stdout,
+            stderr=wrkr_res.stderr,
+            test_duration_seconds=parse_duration_to_seconds(cfg.tuning.duration),
+        )
     except ParseError as e:
         wrkr_rps = None
         wrkr_ok = False

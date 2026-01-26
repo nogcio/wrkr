@@ -48,6 +48,18 @@ def test_parse_wrkr_rps_from_json_ndjson() -> None:
     assert rps.value == pytest.approx(120.0)
 
 
+def test_parse_wrkr_rps_prefers_summary_totals_when_duration_is_provided() -> None:
+    out = _read_fixture("wrkr_json_stdout_mismatched.ndjson")
+
+    # Without an explicit duration, we fall back to elapsed_secs from the last progress line.
+    rps_elapsed = parse_wrkr_rps(stdout=out, stderr="")
+    assert rps_elapsed.value == pytest.approx(150.0)
+
+    # With duration, compute avg as total_requests(summary) / duration.
+    rps_duration = parse_wrkr_rps(stdout=out, stderr="", test_duration_seconds=5.0)
+    assert rps_duration.value == pytest.approx(120.0)
+
+
 def test_try_parse_wrkr_json_summary() -> None:
     out = _read_fixture("wrkr_json_stdout.ndjson")
     s = try_parse_wrkr_json_summary(stdout=out, stderr="")

@@ -45,3 +45,41 @@ pub(crate) fn format_rate(v: f64) -> String {
         "0".to_string()
     }
 }
+
+pub(crate) fn format_duration_from_millis(ms: Option<f64>) -> String {
+    let Some(ms) = ms else {
+        return "-".to_string();
+    };
+    format_duration_adaptive(ms * 1_000.0)
+}
+
+pub(crate) fn format_duration_from_micros(us: Option<f64>) -> String {
+    let Some(us) = us else {
+        return "-".to_string();
+    };
+    format_duration_adaptive(us)
+}
+
+fn format_duration_adaptive(us: f64) -> String {
+    if !us.is_finite() {
+        return "-".to_string();
+    }
+
+    let us = us.max(0.0);
+    if us < 1_000.0 {
+        return format!("{us:.2}µs");
+    }
+
+    let ms = us / 1_000.0;
+    if ms < 1_000.0 {
+        return format!("{ms:.2}ms");
+    }
+
+    let s = ms / 1_000.0;
+    if s < 60.0 {
+        return format!("{s:.2}s");
+    }
+
+    let m = s / 60.0;
+    format!("{m:.2}m")
+}
