@@ -38,6 +38,11 @@ async fn request_impl(
     let request_url = resolve_base_url(&rt.env_vars, apply_params_owned(url, &opts.params));
 
     let mut tags = opts.tags;
+
+    // Always record the HTTP method as a stable metric tag.
+    tags.retain(|(k, _)| k != "method");
+    tags.push(("method".to_string(), method.as_str().to_string()));
+
     if let Some(name) = opts.name {
         tags.retain(|(k, _)| k != "name");
         tags.push(("name".to_string(), name));
