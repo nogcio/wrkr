@@ -117,7 +117,7 @@ pub struct RunArgs {
     /// Path to the script (.lua)
     pub script: PathBuf,
 
-    /// Override iterations (otherwise use `options.iterations` or default=1)
+    /// Override iterations (otherwise use `Options.iterations` or default=1)
     #[arg(long)]
     pub iterations: Option<u64>,
 

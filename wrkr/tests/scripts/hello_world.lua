@@ -1,4 +1,4 @@
-options = { vus = 2 }
+Options = { vus = 2 }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

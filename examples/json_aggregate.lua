@@ -6,7 +6,7 @@
 -- and response JSON object:
 --   { processedOrders = number, results = { [country]=amount }, categoryStats = { [category]=qty } }
 
-options = { vus = 50, duration = "10s" }
+Options = { vus = 50, duration = "10s" }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

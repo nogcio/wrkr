@@ -14,15 +14,15 @@ end
 
 If you define multiple scenarios, each scenario can set `exec` to the function name to run.
 
-## Global `options`
+## Global `Options`
 
-A script may define a global `options` table with defaults:
+A script may define a global `Options` table with defaults:
 
-- `options.vus`
-- `options.duration`
-- `options.iterations`
-- `options.scenarios`
-- `options.thresholds`
+- `Options.vus`
+- `Options.duration`
+- `Options.iterations`
+- `Options.scenarios`
+- `Options.thresholds`
 
 See [Options](../reference/options.md) for full details.
 

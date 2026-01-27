@@ -1,6 +1,6 @@
 -- Minimal script for perf comparisons (keep overhead low).
 -- Use CLI flags to control vus/duration.
-options = { vus = 50 }
+Options = { vus = 50 }
 
 local http = require("wrkr/http")
 local env = require("wrkr/env")

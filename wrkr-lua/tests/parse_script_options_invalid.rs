@@ -13,7 +13,7 @@ fn parse_script_options_rejects_invalid_duration() {
     };
     let msg = err.to_string();
     assert!(
-        msg.contains("InvalidDuration") || msg.contains("options.duration"),
+        msg.contains("InvalidDuration") || msg.contains("Options.duration"),
         "{msg}"
     );
 }
@@ -31,7 +31,7 @@ fn parse_script_options_rejects_invalid_thresholds() {
     };
     let msg = err.to_string();
     assert!(
-        msg.contains("InvalidThresholds") || msg.contains("options.thresholds"),
+        msg.contains("InvalidThresholds") || msg.contains("Options.thresholds"),
         "{msg}"
     );
 }

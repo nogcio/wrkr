@@ -1,4 +1,4 @@
-options = { scenarios = { main = { vus = 2, iterations = 10, exec = 'Default' } } }
+Options = { scenarios = { main = { vus = 2, iterations = 10, exec = 'Default' } } }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

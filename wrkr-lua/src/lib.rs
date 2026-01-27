@@ -25,28 +25,28 @@ pub enum Error {
     #[error("invalid script-relative path: `{0}`")]
     InvalidPath(String),
 
-    #[error("`options.iterations` must be a positive integer")]
+    #[error("`Options.iterations` must be a positive integer")]
     InvalidIterations,
 
-    #[error("`options.vus` must be a positive integer")]
+    #[error("`Options.vus` must be a positive integer")]
     InvalidVus,
 
-    #[error("`options.scenarios[*].executor` must be a string")]
+    #[error("`Options.scenarios[*].executor` must be a string")]
     InvalidExecutor,
 
-    #[error("`options.scenarios[*].stages` must be an array of {{ duration, target }}")]
+    #[error("`Options.scenarios[*].stages` must be an array of {{ duration, target }}")]
     InvalidStages,
 
-    #[error("`options.duration` must be a valid duration, e.g. 10s, 250ms")]
+    #[error("`Options.duration` must be a valid duration, e.g. 10s, 250ms")]
     InvalidDuration,
 
-    #[error("`options.scenarios[*].time_unit` must be a valid duration, e.g. 1s")]
+    #[error("`Options.scenarios[*].time_unit` must be a valid duration, e.g. 1s")]
     InvalidTimeUnit,
 
-    #[error("`options.scenarios[*].tags` must be a table of string -> scalar")]
+    #[error("`Options.scenarios[*].tags` must be a table of string -> scalar")]
     InvalidScenarioTags,
 
-    #[error("`options.thresholds` must be a table of metric -> [expr, ...]")]
+    #[error("`Options.thresholds` must be a table of metric -> [expr, ...]")]
     InvalidThresholds,
 
     #[error("invalid metric name (expected non-empty string)")]

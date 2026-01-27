@@ -30,5 +30,5 @@ BASE_URL="https://example.com" wrkr run examples/ramping_vus.lua
 
 ## What it shows
 
-- `options.scenarios` with `executor = "ramping-vus"`
+- `Options.scenarios` with `executor = "ramping-vus"`
 - `stages = { { duration, target }, ... }`

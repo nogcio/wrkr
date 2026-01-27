@@ -1,9 +1,9 @@
 # Options
 
-A script can define a global `options` table.
+A script can define a global `Options` table.
 
 ```lua
-options = {
+Options = {
   vus = 10,
   duration = "10s",
   iterations = 100,
@@ -21,7 +21,7 @@ options = {
 To define multiple scenarios:
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = { executor = "constant-vus", vus = 10, duration = "10s", exec = "Default" },
   }
@@ -43,7 +43,7 @@ See [Executors](executors.md) for executor-specific fields.
 `wrkr` can evaluate thresholds at the end of a run.
 
 ```lua
-options = {
+Options = {
   thresholds = {
     http_req_duration = { "p(95) < 200" },
     http_req_failed = "rate < 0.01",

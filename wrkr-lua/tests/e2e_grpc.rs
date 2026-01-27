@@ -9,7 +9,7 @@ async fn e2e_grpc_unary_echo() -> Result<()> {
 
     support::run_script(
         "grpc_unary.lua",
-        &[("GRPC_TARGET", grpc.target())],
+        &[("BASE_URL", grpc.target())],
         wrkr_core::RunConfig::default(),
     )
     .await?;

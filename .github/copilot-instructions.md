@@ -47,7 +47,7 @@
 	- **Execution flow (two-phase)**:
 		- Phase 1: parse options.
 			- The CLI reads the script and runs `wrkr_lua::parse_script_options(...)` in a dedicated Lua state.
-			- The script is executed once to read global `options` and (optionally) `options.scenarios`.
+			- The script is executed once to read global `Options` and (optionally) `Options.scenarios`.
 		- Phase 2: run scenarios.
 			- Scenarios are derived from options (`wrkr_core::scenarios_from_options`) and then executed (`wrkr_core::run_scenarios`).
 			- Each VU runs `wrkr_lua::run_vu(...)`, which creates its own Lua state, registers the `wrkr/*` modules, executes the script, then repeatedly calls the selected entry function (`Default()` or `exec` per scenario).

@@ -118,10 +118,25 @@ function totalsMatch(actual, expected) {
 let connected = false;
 let caseId = 0;
 
+function normalizeGrpcTarget(raw) {
+  if (!raw) {
+    return raw;
+  }
+
+  // k6/net/grpc expects "host:port" (no scheme).
+  // Allow passing http(s)://host:port for consistency with wrkr BASE_URL.
+  const m = raw.match(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\/([^/]+)(?:\/.*)?$/);
+  if (m) {
+    return m[1];
+  }
+
+  return raw.split('/')[0];
+}
+
 export default function () {
-  const target = __ENV.GRPC_TARGET;
+  const target = normalizeGrpcTarget(__ENV.BASE_URL);
   if (!target) {
-    throw new Error('GRPC_TARGET is required');
+    throw new Error('BASE_URL is required');
   }
 
   if (!connected) {

@@ -1,4 +1,4 @@
-options = { iterations = 1 }
+Options = { iterations = 1 }
 
 local grpc = require("wrkr/grpc")
 local check = require("wrkr/check")
@@ -11,7 +11,7 @@ local connected = false
 
 function Default()
   if not connected then
-    local ok, err = client:connect(env.GRPC_TARGET, { timeout = "2s" })
+    local ok, err = client:connect(env.BASE_URL, { timeout = "2s" })
     if not ok then error(err) end
     connected = true
   end

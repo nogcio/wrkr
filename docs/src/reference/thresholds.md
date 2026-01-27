@@ -2,10 +2,10 @@
 
 Thresholds are end-of-test assertions over aggregated metrics.
 
-In Lua, thresholds live under `options.thresholds` and map metric name → expression(s).
+In Lua, thresholds live under `Options.thresholds` and map metric name → expression(s).
 
 ```lua
-options = {
+Options = {
   thresholds = {
     http_req_duration = { "p(95) < 200", "avg < 50" },
     http_req_failed = "rate < 0.01",

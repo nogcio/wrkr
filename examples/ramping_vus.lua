@@ -1,6 +1,6 @@
 -- Run: wrkr run examples/ramping_vus.lua --env BASE_URL=http://localhost:8080
 
-options = {
+Options = {
   scenarios = {
     main = {
       executor = "ramping-vus",

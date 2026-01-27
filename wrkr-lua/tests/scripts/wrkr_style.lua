@@ -1,4 +1,4 @@
-options = { iterations = 1 }
+Options = { iterations = 1 }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

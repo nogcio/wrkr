@@ -1,6 +1,6 @@
 -- Regression test: options parsing should accept both camelCase and snake_case keys.
 
-options = {
+Options = {
   scenarios = {
     camel = {
       executor = "ramping-arrival-rate",

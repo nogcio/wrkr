@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
             }
             "-h" | "--help" => {
                 eprintln!(
-                    "wrkr-testserver\n\nUSAGE:\n  wrkr-testserver [--bind 127.0.0.1:0]\n\nOUTPUT:\n  Prints BASE_URL=<url> and GRPC_TARGET=<host:port> to stdout once ready."
+                    "wrkr-testserver\n\nUSAGE:\n  wrkr-testserver [--bind 127.0.0.1:0]\n\nOUTPUT:\n  Prints HTTP_URL=<url> and GRPC_URL=<host:port> to stdout once ready."
                 );
                 return Ok(());
             }
@@ -35,8 +35,8 @@ async fn main() -> anyhow::Result<()> {
     let stats = wrkr_testserver::TestServerStats::default();
     let app = wrkr_testserver::router(stats);
 
-    println!("BASE_URL=http://{addr}");
-    println!("GRPC_TARGET={}", grpc.target());
+    println!("HTTP_URL=http://{addr}");
+    println!("GRPC_URL={}", grpc.target());
 
     let serve = axum::serve(listener, app).with_graceful_shutdown(async move {
         let _ = tokio::signal::ctrl_c().await;

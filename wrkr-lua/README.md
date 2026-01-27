@@ -4,14 +4,14 @@ This crate embeds Lua (via `mlua`) and exposes a small runtime API to scripts vi
 
 ## Script shape
 
-- Define optional global `options` for shared defaults or per-scenario overrides.
+- Define optional global `Options` for shared defaults or per-scenario overrides.
 - Export an entrypoint function named `Default()`. Any custom scenarios should set `exec` to the function name they want to run.
 - Optionally define lifecycle hooks `Setup()`, `Teardown()`, and `HandleSummary(summary)`.
 
 Example:
 
 ```lua
-options = { iterations = 1 }
+Options = { iterations = 1 }
 
 function Default()
   -- your scenario here
@@ -36,14 +36,14 @@ end
 
 ## Scenarios and executors
 
-`wrkr` supports multiple scenarios via `options.scenarios`.
+`wrkr` supports multiple scenarios via `Options.scenarios`.
 
 ### `constant-vus` (default)
 
 If `executor` is omitted, the scenario runs with a constant number of VUs (current default behavior).
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = { executor = "constant-vus", vus = 10, duration = "10s", exec = "Default" },
   },
@@ -55,7 +55,7 @@ options = {
 Ramp the number of active VUs up/down over time.
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = {
       executor = "ramping-vus",
@@ -75,7 +75,7 @@ options = {
 Ramp an open-model arrival rate (iterations started per `timeUnit`), with adaptive VU activation.
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = {
       executor = "ramping-arrival-rate",

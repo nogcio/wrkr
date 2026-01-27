@@ -1,4 +1,4 @@
-options = { vus = 100, duration = "10s" }
+Options = { vus = 100, duration = "10s" }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

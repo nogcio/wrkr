@@ -1,4 +1,4 @@
-options = {
+Options = {
   scenarios = {
     main = {
       executor = 'ramping-arrival-rate',

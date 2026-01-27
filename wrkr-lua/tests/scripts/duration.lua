@@ -1,4 +1,4 @@
-options = { scenarios = { main = { vus = 2, duration = '50ms', exec = 'Default' } } }
+Options = { scenarios = { main = { vus = 2, duration = '50ms', exec = 'Default' } } }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

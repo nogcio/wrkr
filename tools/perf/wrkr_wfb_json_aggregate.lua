@@ -1,7 +1,7 @@
 -- Perf case: POST /analytics/aggregate with a wfb-style payload + response checks.
 -- Stresses wrkr/http + wrkr/json encode/decode + wrkr/check.
 
-options = { vus = 50 }
+Options = { vus = 50 }
 
 local http = require("wrkr/http")
 local check = require("wrkr/check")

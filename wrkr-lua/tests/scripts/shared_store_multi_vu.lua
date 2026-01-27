@@ -1,4 +1,4 @@
-options = { scenarios = { main = { vus = 2, iterations = 2, exec = 'Default' } } }
+Options = { scenarios = { main = { vus = 2, iterations = 2, exec = 'Default' } } }
 
 local shared = require("wrkr/shared")
 local vu = require("wrkr/vu")

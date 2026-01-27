@@ -1,4 +1,4 @@
-options = { iterations = 1 }
+Options = { iterations = 1 }
 
 local uuid = require("wrkr/uuid")
 local check = require("wrkr/check")

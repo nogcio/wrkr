@@ -20,7 +20,7 @@ This section explains what each script does and how to run it.
 Common patterns:
 
 - Most scripts read `BASE_URL` from `wrkr/env`.
-- gRPC scripts usually require `GRPC_TARGET`.
+- gRPC scripts use `BASE_URL` (e.g. `127.0.0.1:50051`).
 
 Tip: the repo also contains a local test server used by the examples:
 
@@ -28,4 +28,4 @@ Tip: the repo also contains a local test server used by the examples:
 cargo run --bin wrkr-testserver
 ```
 
-Then run examples using the printed `BASE_URL=...`.
+Then run HTTP examples using the printed `HTTP_URL=...` (pass it as `BASE_URL`). For gRPC examples, use `GRPC_URL=...`.

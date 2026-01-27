@@ -3,10 +3,10 @@ from __future__ import annotations
 from .errors import ProfileError
 
 
-def format_env_templates(templates: tuple[str, ...], *, base_url: str, grpc_target: str) -> list[str]:
+def format_env_templates(templates: tuple[str, ...], *, http_url: str, grpc_url: str) -> list[str]:
     mapping = {
-        "BASE_URL": base_url,
-        "GRPC_TARGET": grpc_target,
+        "HTTP_URL": http_url,
+        "GRPC_URL": grpc_url,
     }
 
     out: list[str] = []

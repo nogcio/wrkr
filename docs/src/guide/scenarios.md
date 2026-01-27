@@ -1,6 +1,6 @@
 # Scenarios & executors
 
-`wrkr` supports multiple scenarios via `options.scenarios`.
+`wrkr` supports multiple scenarios via `Options.scenarios`.
 
 A scenario can override `vus`, `duration`, and `iterations`, and can choose an executor.
 
@@ -9,7 +9,7 @@ A scenario can override `vus`, `duration`, and `iterations`, and can choose an e
 If `executor` is omitted, the scenario runs with a constant number of VUs.
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = { executor = "constant-vus", vus = 10, duration = "10s", exec = "Default" },
   },
@@ -21,7 +21,7 @@ options = {
 Ramp the number of active VUs up/down over time.
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = {
       executor = "ramping-vus",
@@ -41,7 +41,7 @@ options = {
 Ramp an open-model arrival rate (iterations started per `timeUnit`), with adaptive VU activation.
 
 ```lua
-options = {
+Options = {
   scenarios = {
     main = {
       executor = "ramping-arrival-rate",

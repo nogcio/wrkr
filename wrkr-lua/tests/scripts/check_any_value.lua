@@ -1,6 +1,6 @@
 local check = require("wrkr/check")
 
-options = { vus = 1, iterations = 1 }
+Options = { vus = 1, iterations = 1 }
 
 function Default()
   check("hello", {

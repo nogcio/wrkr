@@ -138,7 +138,7 @@ local http = require("wrkr/http")
 local check = require("wrkr/check")
 local env = require("wrkr/env")
 
-options = {
+Options = {
   vus = 10,
   duration = "10s",
 }

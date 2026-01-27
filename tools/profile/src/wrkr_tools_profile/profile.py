@@ -23,7 +23,7 @@ class ProfileConfig:
     script: str
     pre_sample_sleep_seconds: int = 0
     # Environment variables passed to `wrkr run` as `--env KEY=VALUE`.
-    # Values can reference server-provided placeholders: {BASE_URL} and {GRPC_TARGET}.
+    # Values can reference server-provided placeholders: {HTTP_URL} and {GRPC_URL}.
     env_templates: tuple[str, ...] = ()
 
 
@@ -33,7 +33,7 @@ def run_profile(cfg: ProfileConfig) -> None:
 
     Steps:
     1. Build wrkr binaries in profiling mode.
-    2. Start wrkr-testserver and wait for GRPC_TARGET.
+    2. Start wrkr-testserver and wait for HTTP_URL/GRPC_URL.
     3. Warmup run.
     4. Run wrkr in background and sample its stacks.
     5. Write sample output to tmp/.
@@ -52,13 +52,10 @@ def run_profile(cfg: ProfileConfig) -> None:
     build_profiling(root)
 
     with testserver_targets(root=root) as targets:
-        grpc_target = targets.grpc_target
-        print(f"GRPC_TARGET={grpc_target}")
-
         env_kv = format_env_templates(
             cfg.env_templates,
-            base_url=targets.base_url,
-            grpc_target=grpc_target,
+            http_url=targets.http_url,
+            grpc_url=targets.grpc_url,
         )
 
         # Warmup.

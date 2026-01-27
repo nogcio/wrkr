@@ -102,8 +102,8 @@ def run(cfg: Config, *, color: str = "auto") -> OverallOutcome:
         hello_wrk_rps: Rps | None = None
         grpc_first_wrkr_rps: Rps | None = None
 
-        targets_base_url: str | None = None
-        targets_grpc_target: str | None = None
+        targets_http_url: str | None = None
+        targets_grpc_url: str | None = None
 
         server = TestServer.start(
             root=cfg.root,
@@ -117,17 +117,17 @@ def run(cfg: Config, *, color: str = "auto") -> OverallOutcome:
                     on_log=lambda m: ui.tail(m, style="dim"),
                 )
 
-            targets_base_url = targets.base_url
-            targets_grpc_target = targets.grpc_target
+            targets_http_url = targets.http_url
+            targets_grpc_url = targets.grpc_url
 
-            ui.set_status({"base_url": targets.base_url, "grpc_target": targets.grpc_target})
+            ui.set_status({"http_url": targets.http_url, "grpc_url": targets.grpc_url})
 
             # HTTP cases
             for i, case in enumerate(http_cases):
                 outcome = run_http_case(
                     cfg=cfg,
                     tools=tools,
-                    base_url=targets.base_url,
+                    base_url=targets.http_url,
                     case=case,
                     ui=ui,
                 )
@@ -145,7 +145,7 @@ def run(cfg: Config, *, color: str = "auto") -> OverallOutcome:
                 outcome = run_grpc_case(
                     cfg=cfg,
                     tools=tools,
-                    grpc_target=targets.grpc_target,
+                    grpc_url=targets.grpc_url,
                     case=case,
                     ui=ui,
                 )
@@ -192,7 +192,7 @@ def run(cfg: Config, *, color: str = "auto") -> OverallOutcome:
             f"wrk_connections={cfg.tuning.wrk_connections}"
         )
         console.print(
-            f"- targets: base_url={targets_base_url or '-'} grpc_target={targets_grpc_target or '-'}"
+            f"- targets: http_url={targets_http_url or '-'} grpc_url={targets_grpc_url or '-'}"
         )
         console.print(Text(f"- tool[wrkr]={tools.wrkr}"))
         console.print(Text(f"- tool[wrkr-testserver]={tools.wrkr_testserver}"))

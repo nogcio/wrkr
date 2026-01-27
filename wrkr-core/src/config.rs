@@ -85,7 +85,7 @@ pub struct ScenarioOptions {
     pub name: String,
     pub exec: Option<String>,
 
-    /// Scenario-level metric tags (k6-style `options.scenarios[*].tags`).
+    /// Scenario-level metric tags (k6-style `Options.scenarios[*].tags`).
     pub tags: Vec<(String, String)>,
 
     /// Scenario executor. If missing, defaults to constant VUs.

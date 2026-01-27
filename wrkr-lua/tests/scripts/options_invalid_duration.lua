@@ -1,3 +1,3 @@
-options = { duration = "not-a-duration" }
+Options = { duration = "not-a-duration" }
 
 function Default() end

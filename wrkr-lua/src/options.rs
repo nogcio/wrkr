@@ -9,7 +9,7 @@ use crate::{Error, Result};
 pub fn parse_script_options(
     run_ctx: &wrkr_core::RunScenariosContext,
 ) -> Result<wrkr_core::ScriptOptions> {
-    // Parse `options`/`options.scenarios` using a dedicated Lua state (no globals needed).
+    // Parse `Options`/`Options.scenarios` using a dedicated Lua state (no globals needed).
     let lua = Lua::new();
     configure_module_path(&lua, &run_ctx.script_path)?;
     modules::register(
@@ -28,7 +28,7 @@ pub fn parse_script_options(
     lua.load(&run_ctx.script).set_name(&chunk_name).exec()?;
 
     let globals = lua.globals();
-    let options: Option<Table> = globals.get("options").ok();
+    let options: Option<Table> = globals.get("Options").ok();
     let scenarios_table: Option<Table> = options
         .as_ref()
         .and_then(|t| t.get::<Table>("scenarios").ok());

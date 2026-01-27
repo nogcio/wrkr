@@ -1,4 +1,4 @@
-options = {
+Options = {
   vus = 1,
   iterations = 1,
   thresholds = {

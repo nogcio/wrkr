@@ -14,7 +14,7 @@ BASE_URL="https://example.com" wrkr run examples/plaintext.lua
 
 ## CLI overrides
 
-CLI flags override values from the script’s global `options` table.
+CLI flags override values from the script’s global `Options` table.
 
 ```bash
 wrkr run examples/plaintext.lua --vus 50 --duration 30s
@@ -51,4 +51,4 @@ If you’re working in this repository, you can run a local test server used by 
 cargo run --bin wrkr-testserver
 ```
 
-It prints a `BASE_URL=...` line when ready.
+It prints `HTTP_URL=...` and `GRPC_URL=...` lines when ready.

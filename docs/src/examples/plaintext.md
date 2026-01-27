@@ -16,7 +16,7 @@ Start the server:
 cargo run --bin wrkr-testserver
 ```
 
-In another terminal (use the printed `BASE_URL=...`):
+In another terminal (use the printed `HTTP_URL=...`):
 
 ```bash
 BASE_URL="http://127.0.0.1:12345" wrkr run examples/plaintext.lua

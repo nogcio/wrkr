@@ -62,13 +62,10 @@ def run_samply_profile(cfg: ProfileConfig, *, samply: SamplyConfig | None = None
     build_profiling(root)
 
     with testserver_targets(root=root) as targets:
-        grpc_target = targets.grpc_target
-        print(f"GRPC_TARGET={grpc_target}")
-
         env_kv = format_env_templates(
             cfg.env_templates,
-            base_url=targets.base_url,
-            grpc_target=grpc_target,
+            http_url=targets.http_url,
+            grpc_url=targets.grpc_url,
         )
 
         run_warmup(root, cfg.script, env_kv)

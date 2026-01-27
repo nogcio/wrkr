@@ -107,7 +107,7 @@ wrkr init --lang lua --vscode
 ### 1) Run the local test server (optional)
 
 This repo includes a tiny HTTP server that exposes endpoints used by the example scripts.
-It prints a `BASE_URL=...` line once it is ready.
+It prints `HTTP_URL=...` and `GRPC_URL=...` lines once it is ready.
 
 ```bash
 cargo run --bin wrkr-testserver
@@ -139,7 +139,7 @@ wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VAL
 
 Notes:
 
-- CLI flags override values from the script's global `options` table.
+- CLI flags override values from the script's global `Options` table.
 
 ## Exit codes (wrkr run)
 
@@ -159,7 +159,7 @@ Examples:
 ```bash
 wrkr run examples/plaintext.lua --vus 50 --duration 30s
 wrkr run examples/json_aggregate.lua --iterations 1000 --output json
-wrkr run examples/grpc_aggregate.lua --env GRPC_TARGET=http://127.0.0.1:50051
+wrkr run examples/grpc_aggregate.lua --env BASE_URL=http://127.0.0.1:50051
 wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 ```
 
@@ -184,7 +184,7 @@ Conventions:
 
 At the moment, scripts are Lua files that typically:
 
-- Define an optional global `options` table (defaults + scenarios).
+- Define an optional global `Options` table (defaults + scenarios).
 - Export an entry function `Default()` (and optionally more functions referenced by scenarios via `exec`).
 - Optionally define lifecycle hooks `Setup()`, `Teardown()`, and `HandleSummary(summary)`.
 

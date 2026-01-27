@@ -2,9 +2,9 @@ local grpc = require("wrkr/grpc")
 local check = require("wrkr/check")
 local env = require("wrkr/env")
 
-local target = env.GRPC_TARGET
+local target = env.BASE_URL
 if target == nil then
-  error("GRPC_TARGET is required")
+  error("BASE_URL is required")
 end
 
 local client = grpc.Client.new()

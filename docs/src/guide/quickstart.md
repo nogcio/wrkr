@@ -64,7 +64,7 @@ BASE_URL="https://example.com" cargo run --bin wrkr -- run examples/plaintext.lu
 ## 3) (Optional) Run the local test server
 
 This repo includes a small HTTP/gRPC test server for examples.
-It prints a `BASE_URL=...` line once ready.
+It prints `HTTP_URL=...` and `GRPC_URL=...` lines once ready.
 
 ```bash
 cargo run --bin wrkr-testserver

@@ -3,7 +3,7 @@
 -- Run:
 --   wrkr run examples/lifecycle.lua --env BASE_URL=http://localhost:8080
 
-options = { vus = 5, duration = "5s" }
+Options = { vus = 5, duration = "5s" }
 
 local env = require("wrkr/env")
 local http = require("wrkr/http")

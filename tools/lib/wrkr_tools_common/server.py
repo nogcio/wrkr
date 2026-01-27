@@ -3,7 +3,7 @@ Server lifecycle management (wrkr-testserver).
 
 Provides:
 - TestServer: context manager for starting/stopping testserver.
-- ServerTargets: parsed BASE_URL and GRPC_TARGET.
+- ServerTargets: parsed HTTP_URL and GRPC_URL.
 """
 
 from __future__ import annotations
@@ -25,23 +25,23 @@ class ServerError(RuntimeError):
 class ServerTargets:
     """Parsed server targets."""
 
-    base_url: str
-    grpc_target: str
+    http_url: str
+    grpc_url: str
 
 
 class TestServer:
     """
     Manage wrkr-testserver lifecycle.
 
-    Starts testserver, waits for BASE_URL and GRPC_TARGET lines,
+    Starts testserver, waits for HTTP_URL and GRPC_URL lines,
     then provides them to callers.
     """
 
     def __init__(self, *, proc: subprocess.Popen[bytes], started_at: float) -> None:
         self._proc = proc
         self._started_at = started_at
-        self._base_url: str | None = None
-        self._grpc_target: str | None = None
+        self._http_url: str | None = None
+        self._grpc_url: str | None = None
 
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
@@ -94,7 +94,7 @@ class TestServer:
         self, *, timeout_s: float, on_log: Callable[[str], None] | None = None
     ) -> ServerTargets:
         """
-        Wait for BASE_URL and GRPC_TARGET from server.
+        Wait for HTTP_URL and GRPC_URL from server.
 
         Parameters
         ----------
@@ -115,14 +115,14 @@ class TestServer:
 
         deadline = time.monotonic() + timeout_s
         while True:
-            if self._base_url is not None and self._grpc_target is not None:
+            if self._http_url is not None and self._grpc_url is not None:
                 if on_log is None:
-                    print(f"Server: {self._base_url}", flush=True)
-                    print(f"gRPC: {self._grpc_target}", flush=True)
+                    print(f"HTTP: {self._http_url}", flush=True)
+                    print(f"gRPC: {self._grpc_url}", flush=True)
                 else:
-                    on_log(f"Server: {self._base_url}")
-                    on_log(f"gRPC: {self._grpc_target}")
-                return ServerTargets(base_url=self._base_url, grpc_target=self._grpc_target)
+                    on_log(f"HTTP: {self._http_url}")
+                    on_log(f"gRPC: {self._grpc_url}")
+                return ServerTargets(http_url=self._http_url, grpc_url=self._grpc_url)
 
             rc = self._proc.poll()
             if rc is not None:
@@ -138,7 +138,7 @@ class TestServer:
             if time.monotonic() > deadline:
                 stderr = self._stderr_tail_text()
                 raise ServerError(
-                    "timed out waiting for BASE_URL/GRPC_TARGET from testserver:\n"
+                    "timed out waiting for HTTP_URL/GRPC_URL from testserver:\n"
                     f"  elapsed_s: {self._elapsed_s():.3f}\n"
                     "--- stderr (tail) ---\n"
                     f"{stderr}\n"
@@ -173,10 +173,10 @@ class TestServer:
             assert self._proc.stdout is not None
             for raw in iter(self._proc.stdout.readline, b""):
                 line = raw.decode("utf-8", errors="replace").rstrip("\r\n")
-                if line.startswith("BASE_URL="):
-                    self._base_url = line.removeprefix("BASE_URL=").strip()
-                elif line.startswith("GRPC_TARGET="):
-                    self._grpc_target = line.removeprefix("GRPC_TARGET=").strip()
+                if line.startswith("HTTP_URL="):
+                    self._http_url = line.removeprefix("HTTP_URL=").strip()
+                elif line.startswith("GRPC_URL="):
+                    self._grpc_url = line.removeprefix("GRPC_URL=").strip()
                 # Keep draining stdout even after we learn the targets.
                 # If the server logs to stdout under load and we stop reading,
                 # its stdout pipe can fill and block the server process.

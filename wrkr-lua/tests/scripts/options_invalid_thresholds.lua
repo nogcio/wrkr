@@ -1,3 +1,3 @@
-options = { thresholds = 123 }
+Options = { thresholds = 123 }
 
 function Default() end

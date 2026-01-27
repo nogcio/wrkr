@@ -30,7 +30,7 @@ use wrkr_shared::store::SharedStore;
 pub fn scenarios_from_options(opts: ScriptOptions, cfg: RunConfig) -> Result<Vec<ScenarioConfig>> {
     let cli_overrides_set = cfg.vus.is_some() || cfg.iterations.is_some() || cfg.duration.is_some();
 
-    // If `options.scenarios` exists, it wins. Otherwise we fall back to top-level options.
+    // If `Options.scenarios` exists, it wins. Otherwise we fall back to top-level options.
     if !opts.scenarios.is_empty() {
         let mut out = Vec::with_capacity(opts.scenarios.len());
         for s in opts.scenarios {

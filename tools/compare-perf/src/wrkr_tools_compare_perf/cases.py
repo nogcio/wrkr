@@ -523,7 +523,7 @@ def run_grpc_case(
     *,
     cfg: Config,
     tools: ToolPaths,
-    grpc_target: str,
+    grpc_url: str,
     case: GrpcCase,
     ui: RunUI,
 ) -> GrpcCaseOutcome:
@@ -540,7 +540,7 @@ def run_grpc_case(
     summary_lines: list[str] = []
 
     ui.log("wrkr")
-    wrkr_env = {"GRPC_TARGET": grpc_target, **_no_proxy_env_for_localhost()}
+    wrkr_env = {"BASE_URL": grpc_url, **_no_proxy_env_for_localhost()}
     wrkr_argv = [
         str(tools.wrkr),
         "run",
@@ -552,7 +552,7 @@ def run_grpc_case(
         "--vus",
         str(cfg.tuning.wrkr_vus),
         "--env",
-        f"GRPC_TARGET={grpc_target}",
+        f"BASE_URL={grpc_url}",
     ]
     with ui.step(f"{title}: wrkr"):
         ui.set_current_command(label="wrkr", argv=wrkr_argv, cwd=cfg.root, env=wrkr_env)

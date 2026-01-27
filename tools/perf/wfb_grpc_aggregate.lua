@@ -7,7 +7,7 @@ local env = require("wrkr/env")
 local Pool = require("lib.pool")
 local wfb = require("lib.wfb")
 
-options = wfb.ramping_vus_options(wfb.max_vus(50), wfb.duration("10s"))
+Options = wfb.ramping_vus_options(wfb.max_vus(50), wfb.duration("10s"))
 
 local countries = { "US", "DE", "FR", "JP" }
 local categories = { "Electronics", "Books", "Clothing", "Home" }
@@ -111,9 +111,9 @@ local pool = Pool.new({
   generate = generate_case,
 })
 
-local target = env.GRPC_TARGET
+local target = env.BASE_URL
 if target == nil then
-  error("GRPC_TARGET is required")
+  error("BASE_URL is required")
 end
 
 client = grpc.Client.new()

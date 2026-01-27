@@ -9,7 +9,7 @@ async fn e2e_grpc_aggregate_orders() -> Result<()> {
 
     support::run_script(
         "grpc_aggregate.lua",
-        &[("GRPC_TARGET", grpc.target())],
+        &[("BASE_URL", grpc.target())],
         wrkr_core::RunConfig::default(),
     )
     .await?;

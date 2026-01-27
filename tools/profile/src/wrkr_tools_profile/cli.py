@@ -63,7 +63,7 @@ def grpc(
         vus=vus,
         script=script,
         pre_sample_sleep_seconds=0,
-        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+        env_templates=("BASE_URL={GRPC_URL}",),
     )
     try:
         run_profile(cfg)
@@ -118,7 +118,7 @@ def grpc_samply(
         vus=vus,
         script=script,
         pre_sample_sleep_seconds=0,
-        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+        env_templates=("BASE_URL={GRPC_URL}",),
     )
 
     try:
@@ -180,7 +180,7 @@ def wfb_grpc(
         vus=vus,
         script=script,
         pre_sample_sleep_seconds=pre_sample_sleep,
-        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+        env_templates=("BASE_URL={GRPC_URL}",),
     )
     try:
         run_profile(cfg)
@@ -235,7 +235,7 @@ def wfb_grpc_samply(
         vus=vus,
         script=script,
         pre_sample_sleep_seconds=0,
-        env_templates=("GRPC_TARGET={GRPC_TARGET}",),
+        env_templates=("BASE_URL={GRPC_URL}",),
     )
 
     try:
@@ -344,11 +344,8 @@ def grpc_aggregate_samply(
         vus=vus,
         script=script,
         pre_sample_sleep_seconds=0,
-        # examples/grpc_aggregate.lua currently uses examples/lib/example.lua which expects BASE_URL,
-        # but the target we want is the gRPC endpoint provided as GRPC_TARGET.
         env_templates=(
-            "BASE_URL={GRPC_TARGET}",
-            "GRPC_TARGET={GRPC_TARGET}",
+            "BASE_URL={GRPC_URL}",
         ),
     )
 

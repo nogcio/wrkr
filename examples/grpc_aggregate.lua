@@ -4,9 +4,9 @@
 --   service AnalyticsService { rpc AggregateOrders(AnalyticsRequest) returns (AggregateResult); }
 --
 -- Required env vars:
---   GRPC_TARGET (e.g. "http://127.0.0.1:50051")
+--   BASE_URL (e.g. "127.0.0.1:50051" or "http://127.0.0.1:50051")
 
-options = { vus = 50, duration = "10s" }
+Options = { vus = 50, duration = "10s" }
 
 local grpc = require("wrkr/grpc")
 local check = require("wrkr/check")

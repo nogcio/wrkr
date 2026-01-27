@@ -165,7 +165,7 @@ py-test: ## Run Python unit tests (pytest)
 VUS ?= 64
 DURATION ?= 5s
 
-tools-compare-perf-run: ## Run compare-perf run
+tools-compare-perf-run: py-sync ## Run compare-perf run
 	# Defaults are intentionally conservative to avoid connection failures on laptops.
 	# Override: `make tools-compare-perf-run VUS=256 DURATION=10s`
 	$(UV) run --project $(PY_PROJECT) wrkr-tools-compare-perf run --build \

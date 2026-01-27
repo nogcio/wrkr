@@ -1,4 +1,4 @@
-options = {
+Options = {
   vus = 1,
   thresholds = {
     my_counter = "count == 0",

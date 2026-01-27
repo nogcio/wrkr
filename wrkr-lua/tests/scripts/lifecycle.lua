@@ -1,4 +1,4 @@
-options = {
+Options = {
   vus = 2,
   iterations = 4,
 }
