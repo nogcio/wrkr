@@ -18,8 +18,8 @@ pub(super) fn estimate_http_request_bytes_parts(
     body_len: u64,
 ) -> Result<u64> {
     let parsed = url::Url::parse(url).map_err(|_| Error::InvalidUrl(url.to_string()))?;
-    if parsed.scheme() != "http" {
-        return Err(Error::OnlyHttpSupported(url.to_string()));
+    if parsed.scheme() != "http" && parsed.scheme() != "https" {
+        return Err(Error::UnsupportedScheme(url.to_string()));
     }
 
     let uri: hyper::Uri = url

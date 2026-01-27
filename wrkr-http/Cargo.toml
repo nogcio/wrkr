@@ -12,6 +12,11 @@ bytes = "1"
 http = "1"
 http-body-util = "0.1"
 hyper = { version = "1", features = ["client", "http1"] }
+hyper-rustls = { version = "0.27", default-features = false, features = [
+    "http1",
+    "ring",
+    "webpki-roots",
+] }
 hyper-util = { version = "0.1", features = ["client-legacy", "http1", "tokio"] }
 strum = { workspace = true }
 thiserror = "2"

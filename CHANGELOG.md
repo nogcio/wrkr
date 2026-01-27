@@ -13,6 +13,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.0.9] - 2026-01-27
+
+### Added
+- HTTP: support `https://` URLs for HTTP checks (TLS via rustls).
+
+### Changed
+- HTTP: replace the `OnlyHttpSupported` error with `UnsupportedScheme` (now allows both `http://` and `https://`).
+
 ## [0.0.8] - 2026-01-27
 
 ### Added

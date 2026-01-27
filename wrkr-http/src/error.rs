@@ -6,7 +6,7 @@ pub type Result<T> = std::result::Result<T, Error>;
 #[strum(serialize_all = "snake_case")]
 pub enum HttpTransportErrorKind {
     InvalidUrl,
-    OnlyHttpSupported,
+    UnsupportedScheme,
     RequestBuild,
     HeaderName,
     HeaderValue,
@@ -20,8 +20,8 @@ pub enum Error {
     #[error("invalid url: {0}")]
     InvalidUrl(String),
 
-    #[error("only http:// URLs are supported for now: {0}")]
-    OnlyHttpSupported(String),
+    #[error("unsupported URL scheme: {0} (only http:// and https:// are supported)")]
+    UnsupportedScheme(String),
 
     #[error("http request build failed: {0}")]
     RequestBuild(#[from] http::Error),
@@ -47,7 +47,7 @@ impl Error {
     pub fn transport_error_kind(&self) -> HttpTransportErrorKind {
         match self {
             Self::InvalidUrl(_) => HttpTransportErrorKind::InvalidUrl,
-            Self::OnlyHttpSupported(_) => HttpTransportErrorKind::OnlyHttpSupported,
+            Self::UnsupportedScheme(_) => HttpTransportErrorKind::UnsupportedScheme,
             Self::RequestBuild(_) => HttpTransportErrorKind::RequestBuild,
             Self::HeaderName(_) => HttpTransportErrorKind::HeaderName,
             Self::HeaderValue(_) => HttpTransportErrorKind::HeaderValue,

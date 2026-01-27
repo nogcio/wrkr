@@ -2,6 +2,7 @@ use bytes::Bytes;
 use http_body_util::{BodyExt as _, Full};
 use hyper::Request;
 use hyper::body::Incoming;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
@@ -14,7 +15,7 @@ use super::{Error, HttpRequest, HttpResponse, Result};
 
 #[derive(Debug, Clone)]
 pub struct HttpClient {
-    inner: Client<HttpConnector, Full<Bytes>>,
+    inner: Client<HttpsConnector<HttpConnector>, Full<Bytes>>,
 }
 
 impl Default for HttpClient {
@@ -30,11 +31,17 @@ impl Default for HttpClient {
 impl HttpClient {
     #[must_use]
     pub fn new(connect_timeout: Option<Duration>) -> Self {
-        let mut connector = HttpConnector::new();
-        connector.enforce_http(false);
-        connector.set_connect_timeout(connect_timeout);
+        let mut http_connector = HttpConnector::new();
+        http_connector.enforce_http(false);
+        http_connector.set_connect_timeout(connect_timeout);
 
-        let inner = Client::builder(TokioExecutor::new()).build(connector);
+        let https_connector = HttpsConnectorBuilder::new()
+            .with_webpki_roots()
+            .https_or_http()
+            .enable_http1()
+            .wrap_connector(http_connector);
+
+        let inner = Client::builder(TokioExecutor::new()).build(https_connector);
 
         Self { inner }
     }
@@ -42,8 +49,8 @@ impl HttpClient {
     pub async fn request(&self, req: HttpRequest) -> Result<HttpResponse> {
         let timeout = req.timeout;
         let parsed = url::Url::parse(&req.url).map_err(|_| Error::InvalidUrl(req.url.clone()))?;
-        if parsed.scheme() != "http" {
-            return Err(Error::OnlyHttpSupported(req.url));
+        if parsed.scheme() != "http" && parsed.scheme() != "https" {
+            return Err(Error::UnsupportedScheme(req.url));
         }
 
         let bytes_sent = estimate_http_request_bytes_parts(
