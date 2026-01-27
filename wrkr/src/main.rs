@@ -1,10 +1,13 @@
 mod cli;
 mod exit_codes;
+mod export_scenario;
 mod init;
 mod output;
 mod run;
 mod run_error;
+mod run_support;
 mod runtime;
+mod scenario_yaml;
 mod script_language;
 
 use clap::Parser;
@@ -36,6 +39,17 @@ async fn main() {
             Err(err) => {
                 eprintln!("{err}");
                 err.exit_code().as_i32()
+            }
+        },
+        cli::Command::Scenario(args) => match args.command {
+            cli::ScenarioCommand::Export(args) => {
+                match export_scenario::export_scenario(args).await {
+                    Ok(code) => code.as_i32(),
+                    Err(err) => {
+                        eprintln!("{err}");
+                        err.exit_code().as_i32()
+                    }
+                }
             }
         },
         cli::Command::Init(args) => match init::init(args).await {

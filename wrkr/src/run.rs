@@ -1,4 +1,3 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::cli::OutputFormat;
@@ -6,8 +5,9 @@ use crate::cli::RunArgs;
 use crate::exit_codes::ExitCode;
 use crate::output;
 use crate::run_error::RunError;
+use crate::run_support::{classify_runtime_create_error, classify_runtime_error, merged_env};
 use crate::runtime;
-use anyhow::Context as _;
+use crate::scenario_yaml;
 
 pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     let out = output::formatter(args.output);
@@ -22,19 +22,56 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     let runtime = runtime::create_runtime(&args.script).map_err(classify_runtime_create_error)?;
     let mut run_ctx = runtime.create_run_context(&env);
 
-    let opts = runtime
-        .parse_script_options(&run_ctx)
-        .map_err(|e| classify_runtime_error("failed to parse script options", e))?;
+    let (opts, scenarios) = match args.scenario.as_deref() {
+        None => {
+            let opts = runtime
+                .parse_script_options(&run_ctx)
+                .map_err(|e| classify_runtime_error("failed to parse script options", e))?;
+
+            let scenarios = wrkr_core::scenarios_from_options(opts.clone(), cfg).map_err(|e| {
+                RunError::InvalidInput(anyhow::Error::new(e).context("invalid scenario config"))
+            })?;
+
+            (opts, scenarios)
+        }
+        Some(sel) if scenario_yaml::looks_like_yaml_path(sel) => {
+            let scenario_path = std::path::PathBuf::from(sel);
+            let opts = scenario_yaml::load_script_options_from_yaml(&scenario_path)
+                .await
+                .map_err(|e| RunError::InvalidInput(e.context("failed to load scenario YAML")))?;
+
+            let scenarios = wrkr_core::scenarios_from_options(opts.clone(), cfg).map_err(|e| {
+                RunError::InvalidInput(anyhow::Error::new(e).context("invalid scenario config"))
+            })?;
+
+            (opts, scenarios)
+        }
+        Some(name) => {
+            let opts = runtime
+                .parse_script_options(&run_ctx)
+                .map_err(|e| classify_runtime_error("failed to parse script options", e))?;
+
+            let mut scenarios =
+                wrkr_core::scenarios_from_options(opts.clone(), cfg).map_err(|e| {
+                    RunError::InvalidInput(anyhow::Error::new(e).context("invalid scenario config"))
+                })?;
+
+            scenarios.retain(|s| s.metrics_ctx.scenario() == name);
+            if scenarios.is_empty() {
+                return Err(RunError::InvalidInput(anyhow::anyhow!(
+                    "unknown scenario: {name}"
+                )));
+            }
+
+            (opts, scenarios)
+        }
+    };
 
     run_ctx.thresholds = Arc::from(opts.thresholds.clone().into_boxed_slice());
 
     runtime
         .run_setup(&run_ctx)
         .map_err(|e| classify_runtime_error("script Setup failed", e))?;
-
-    let scenarios = wrkr_core::scenarios_from_options(opts.clone(), cfg).map_err(|e| {
-        RunError::InvalidInput(anyhow::Error::new(e).context("invalid scenario config"))
-    })?;
 
     out.print_header(args.script.as_path(), &scenarios);
     let progress = out.progress();
@@ -93,88 +130,4 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         checks_failed,
         thresholds_failed,
     ))
-}
-
-fn merged_env(overrides: &[String]) -> anyhow::Result<wrkr_core::EnvVars> {
-    let mut map: BTreeMap<String, String> = std::env::vars()
-        .map(|(k, v)| (k.to_string(), v.to_string()))
-        .collect();
-
-    for raw in overrides {
-        let (k, v) = parse_env_override(raw)?;
-        map.insert(k, v);
-    }
-
-    let vars: Vec<(Arc<str>, Arc<str>)> = map
-        .into_iter()
-        .map(|(k, v)| (Arc::<str>::from(k), Arc::<str>::from(v)))
-        .collect();
-
-    Ok(Arc::from(vars.into_boxed_slice()))
-}
-
-fn parse_env_override(s: &str) -> anyhow::Result<(String, String)> {
-    let (k, v) = s
-        .split_once('=')
-        .with_context(|| format!("invalid --env (expected KEY=VALUE): {s}"))?;
-    if k.is_empty() {
-        anyhow::bail!("invalid --env (empty KEY): {s}");
-    }
-    Ok((k.to_string(), v.to_string()))
-}
-
-fn classify_runtime_create_error(err: anyhow::Error) -> RunError {
-    // Unsupported extensions and missing script files are treated as invalid input.
-    if let Some(io) = err.downcast_ref::<std::io::Error>()
-        && io.kind() == std::io::ErrorKind::NotFound
-    {
-        return RunError::InvalidInput(err);
-    }
-    RunError::InvalidInput(err)
-}
-
-fn classify_runtime_error(context: &'static str, err: crate::runtime::RuntimeError) -> RunError {
-    #[cfg(feature = "lua")]
-    {
-        match err {
-            crate::runtime::RuntimeError::Lua(lua_err) => {
-                use wrkr_lua::Error as LuaError;
-
-                let kind = match &lua_err {
-                    // Invalid options/config input.
-                    LuaError::InvalidIterations
-                    | LuaError::InvalidVus
-                    | LuaError::InvalidExecutor
-                    | LuaError::InvalidStages
-                    | LuaError::InvalidDuration
-                    | LuaError::InvalidTimeUnit
-                    | LuaError::InvalidScenarioTags
-                    | LuaError::InvalidThresholds => RunError::InvalidInput,
-
-                    // User script error (runtime error, missing entrypoints, bad API use).
-                    LuaError::Lua(_)
-                    | LuaError::MissingDefault
-                    | LuaError::MissingExec(_)
-                    | LuaError::MissingScriptPath(_)
-                    | LuaError::InvalidPath(_)
-                    | LuaError::InvalidMetricName
-                    | LuaError::InvalidMetricValue => RunError::ScriptError,
-
-                    // Core errors surfaced through the Lua layer.
-                    LuaError::Core(_) => RunError::InvalidInput,
-
-                    // IO while executing script hooks/modules.
-                    LuaError::Io(_) => RunError::RuntimeError,
-                };
-
-                kind(anyhow::Error::new(lua_err).context(context))
-            }
-        }
-    }
-
-    #[cfg(not(feature = "lua"))]
-    {
-        let _ = context;
-        RunError::RuntimeError(anyhow::Error::new(err))
-    }
 }

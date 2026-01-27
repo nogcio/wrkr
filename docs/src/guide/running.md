@@ -22,6 +22,43 @@ wrkr run examples/json_aggregate.lua --iterations 1000
 wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
 ```
 
+## Selecting a scenario
+
+If your script defines `Options.scenarios`, you can run a single scenario by name:
+
+```bash
+wrkr run examples/plaintext.lua --scenario main
+```
+
+You can also pass a YAML file describing one or more scenarios. In this mode, `wrkr` does **not**
+execute the script to parse `Options` (it only runs the scenario entry function during the run).
+
+```bash
+wrkr run examples/plaintext.lua --scenario path/to/scenario.yaml
+```
+
+Minimal YAML (flat form):
+
+```yaml
+name: main
+executor: constant-vus
+vus: 10
+duration: 10s
+exec: Default
+```
+
+The export command writes a multi-scenario form (top-level `scenarios:` list), and `wrkr run` can
+consume that file directly.
+
+## Exporting a scenario to YAML
+
+To export the resolved scenario configuration(s) (after applying the same CLI overrides as
+`wrkr run`) without executing a run:
+
+```bash
+wrkr scenario export examples/plaintext.lua --out scenarios.yaml
+```
+
 ## Output formats
 
 - Default: human summary.

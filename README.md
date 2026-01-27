@@ -134,12 +134,14 @@ BASE_URL="https://example.com" cargo run --bin wrkr -- run examples/plaintext.lu
 ## Usage
 
 ```bash
-wrkr run <script.lua> [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json]
+wrkr run <script.lua> [--scenario NAME|PATH.yml] [--vus N] [--duration 10s] [--iterations N] [--env KEY=VALUE] [--output human-readable|json]
 ```
 
 Notes:
 
 - CLI flags override values from the script's global `Options` table.
+- `--scenario NAME` runs only the selected scenario from `Options.scenarios`.
+- `--scenario PATH.yml` loads a single scenario from YAML and skips parsing `Options`.
 
 ## Exit codes (wrkr run)
 
@@ -161,6 +163,14 @@ wrkr run examples/plaintext.lua --vus 50 --duration 30s
 wrkr run examples/json_aggregate.lua --iterations 1000 --output json
 wrkr run examples/grpc_aggregate.lua --env BASE_URL=http://127.0.0.1:50051
 wrkr run examples/plaintext.lua --env BASE_URL=https://example.com
+wrkr run examples/plaintext.lua --scenario main
+wrkr run examples/plaintext.lua --scenario ./wrkr/tests/fixtures/scenario_yaml/flat.yaml
+
+# Export resolved scenarios to YAML (no run is executed)
+wrkr scenario export examples/plaintext.lua --out scenarios.yaml
+
+# Export the resolved scenario (no run is executed)
+	wrkr scenario export examples/plaintext.lua --out scenarios.yaml
 ```
 
 ### JSON output (NDJSON)

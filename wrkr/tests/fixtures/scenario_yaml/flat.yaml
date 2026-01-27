@@ -1,0 +1,12 @@
+name: main
+exec: Default
+executor: constant-vus
+vus: 5
+duration: 2s
+tags:
+  env: local
+  build: 123
+thresholds:
+  http_req_duration{method=GET}:
+    - p(95)<0.5
+    - avg<0.2

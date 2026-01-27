@@ -69,7 +69,7 @@ pub enum OutputFormat {
     author,
     version,
     about = "Fast, scriptable load testing tool",
-    long_about = "wrkr is a fast, scriptable load testing tool.\n\nA test script defines an `options` table (iterations/vus/duration/scenarios) and an entry function to execute per virtual user.\n\nThe current script runtime is Lua and built-in APIs are available via `require(\"wrkr/...\")`.\n\nBy default, environment variables from the current process are visible to the script; use `--env KEY=VALUE` to add/override values.",
+    long_about = "wrkr is a fast, scriptable load testing tool.\n\nA test script defines an `options` table (iterations/vus/duration/scenarios) and an entry function to execute per virtual user.\n\nThe current script runtime is Lua and built-in APIs are available via `require(\"wrkr/...\")`.\n\nUse `--scenario NAME` to select a single scenario from `Options.scenarios`, or `--scenario PATH.yml` to load one or more scenarios from YAML (skipping `Options` parsing).\n\nBy default, environment variables from the current process are visible to the script; use `--env KEY=VALUE` to add/override values.",
     after_help = "Examples:\n  wrkr run examples/plaintext.lua\n  wrkr run examples/plaintext.lua --vus 50 --duration 30s\n  wrkr run examples/json_aggregate.lua --iterations 1000 --output json\n  wrkr run examples/plaintext.lua --env BASE_URL=https://example.com\n\nDocs & examples: https://github.com/nogcio/wrkr"
 )]
 pub struct Cli {
@@ -85,8 +85,50 @@ pub enum Command {
     )]
     Run(RunArgs),
 
+    /// Scenario utilities (export, etc.)
+    Scenario(ScenarioArgs),
+
     /// Scaffold a scripting workspace for a specific runtime language
     Init(InitArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ScenarioArgs {
+    #[command(subcommand)]
+    pub command: ScenarioCommand,
+}
+
+#[derive(Debug, Subcommand)]
+pub enum ScenarioCommand {
+    /// Export the resolved scenario to YAML (no run is executed)
+    Export(ExportScenarioArgs),
+}
+
+#[derive(Debug, Args)]
+pub struct ExportScenarioArgs {
+    /// Path to the script (.lua)
+    pub script: PathBuf,
+
+    /// Override iterations (otherwise use `Options.iterations` or default=1)
+    #[arg(long)]
+    pub iterations: Option<u64>,
+
+    /// Number of virtual users
+    #[arg(long)]
+    pub vus: Option<u64>,
+
+    /// Test duration (e.g. 10s, 250ms, 1m)
+    #[arg(long, value_parser = parse_duration)]
+    pub duration: Option<Duration>,
+
+    /// Add/override env vars visible to the script (repeatable, KEY=VALUE).
+    /// CLI-provided vars override the current process env.
+    #[arg(long = "env", value_name = "KEY=VALUE")]
+    pub env: Vec<String>,
+
+    /// Output YAML file path
+    #[arg(long, value_name = "FILE", default_value = "scenario.yaml")]
+    pub out: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -116,6 +158,11 @@ pub struct InitArgs {
 pub struct RunArgs {
     /// Path to the script (.lua)
     pub script: PathBuf,
+
+    /// Run a specific scenario by name, or provide a YAML file (.yml/.yaml) describing one or
+    /// more scenarios to run. When a YAML file is provided, the script's `Options` table is not parsed.
+    #[arg(long, value_name = "NAME|PATH.yml")]
+    pub scenario: Option<String>,
 
     /// Override iterations (otherwise use `Options.iterations` or default=1)
     #[arg(long)]
@@ -192,6 +239,7 @@ mod tests {
                 assert_eq!(args.env, vec!["FOO=bar".to_string(), "EMPTY=".to_string()]);
                 assert!(matches!(args.output, OutputFormat::HumanReadable));
             }
+            Command::Scenario(_) => panic!("expected run command"),
             Command::Init(_) => panic!("expected run command"),
         }
     }
@@ -212,6 +260,7 @@ mod tests {
                 assert_eq!(args.lang, ScriptLanguage::Lua);
                 assert_eq!(args.script, None);
             }
+            Command::Scenario(_) => panic!("expected init command"),
             Command::Run(_) => panic!("expected init command"),
         }
     }

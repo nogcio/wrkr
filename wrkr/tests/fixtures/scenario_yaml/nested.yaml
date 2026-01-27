@@ -1,0 +1,11 @@
+scenario:
+  name: main
+  exec: Default
+  executor: ramping-vus
+  startVUs: 0
+  stages:
+    - duration: 1s
+      target: 10
+    - duration: 1s
+      target: 0
+thresholds: {}
