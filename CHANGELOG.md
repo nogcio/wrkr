@@ -13,6 +13,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 ### Fixed
 
+## [0.1.1] - 2026-01-27
+
+### Added
+- CLI: `--scenario PATH.yml/.yaml` mode to load scenarios from YAML and skip parsing script `Options`.
+- CLI: `wrkr scenario export` to export resolved scenario configuration to YAML without executing a run.
+
+### Changed
+- Scenario YAML supports multi-scenario files (`scenarios: [...]`) as exported by `wrkr scenario export` and consumable by `wrkr run`.
+
 ## [0.1.0] - 2026-01-27
 
 ### Changed
@@ -128,7 +137,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Example scripts under `examples/` (HTTP, JSON aggregation, gRPC aggregation, lifecycle hooks).
 - Distribution: GitHub Release binaries, Docker image on release tags, and Homebrew formula.
 
-[Unreleased]: https://github.com/nogcio/wrkr/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/nogcio/wrkr/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/nogcio/wrkr/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nogcio/wrkr/compare/v0.0.9...v0.1.0
 [0.0.9]: https://github.com/nogcio/wrkr/compare/v0.0.8...v0.0.9
 [0.0.8]: https://github.com/nogcio/wrkr/compare/v0.0.7...v0.0.8
