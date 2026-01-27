@@ -67,7 +67,7 @@ const LUARC_JSON: &str = r#"{
     ".wrkr/lua-stubs"
   ],
   "diagnostics.globals": [
-    "options",
+    "Options",
     "Default",
     "Setup",
     "Teardown",
