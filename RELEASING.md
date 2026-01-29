@@ -54,7 +54,7 @@ CI should:
 
 - Verify the GitHub Release assets look correct.
 - Verify Homebrew formula update landed in `nogcio/homebrew-wrkr`.
-- Spot-check `docker pull nogcio/wrkr:X.Y.Z` (or the version tag you published).
+- Spot-check `docker pull ghcr.io/nogcio/wrkr:X.Y.Z` (or the version tag you published).
 
 ## Notes
 

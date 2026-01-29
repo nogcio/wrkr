@@ -16,7 +16,7 @@ brew install wrkr
 - Docker:
 
 ```bash
-docker pull nogcio/wrkr:<version>
+docker pull ghcr.io/nogcio/wrkr:<version>
 ```
 
 If you’re developing locally (from source):

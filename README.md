@@ -63,13 +63,12 @@ Note: gRPC support requires `protoc` at runtime when you load `.proto` files.
 - Linux (Debian/Ubuntu): `sudo apt-get install -y protobuf-compiler`
 - Windows: release archive includes `protoc.exe` and `protoc-include/` next to `wrkr.exe` (or set `PROTOC` to override)
 
-### Docker
+## Docker
 
-Pull the published image (built on release tags):
-
-```bash
-docker pull nogcio/wrkr:<version>
+```sh
+docker pull ghcr.io/nogcio/wrkr:<version>
 ```
+
 
 ### From source (development)
 
