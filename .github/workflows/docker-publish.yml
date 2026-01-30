@@ -187,7 +187,7 @@ jobs:
           set -euo pipefail
           mkdir -p /tmp/digests
           digest="${{ steps.build-and-push.outputs.digest }}"
-          echo "$digest" > "/tmp/digests/${digest#sha256:}"
+          echo "$digest" > "/tmp/digests/${{ matrix.platform_slug }}"
         shell: bash
 
       - name: Upload digest artifact
@@ -281,7 +281,25 @@ jobs:
 
           refs=""
           for d in /tmp/digests/*; do
-            digest="sha256:$(basename "$d")"
+            digest="$(cat "$d")"
+            if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::invalid digest file '$d': '$digest'"
+              exit 1
+            fi
+
+            # GHCR can be briefly eventually-consistent for digest-only refs.
+            # Retry to reduce flakiness when assembling the final manifest list.
+            for attempt in 1 2 3 4 5 6 7 8 9 10; do
+              if docker buildx imagetools inspect "${IMAGE}@${digest}" >/dev/null 2>&1; then
+                break
+              fi
+              if [ "$attempt" -eq 10 ]; then
+                echo "::error::image digest not found in registry after retries: ${IMAGE}@${digest}"
+                exit 1
+              fi
+              sleep 3
+            done
+
             refs="$refs ${IMAGE}@${digest}"
           done
 
