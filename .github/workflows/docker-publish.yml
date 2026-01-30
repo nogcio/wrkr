@@ -208,7 +208,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: digests-${{ matrix.platform_slug }}
-          path: /tmp/digests/*
+          path: /tmp/digests/${{ matrix.platform_slug }}
           if-no-files-found: error
 
   manifest:
@@ -301,7 +301,11 @@ jobs:
           done
 
           refs=""
-          for d in /tmp/digests/*; do
+          for d in /tmp/digests/linux-*; do
+            if [ ! -f "$d" ]; then
+              echo "::error::no platform digest files found under /tmp/digests (expected files like linux-amd64, linux-arm64)"
+              exit 1
+            fi
             digest="$(cat "$d")"
             if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
               echo "::error::invalid digest file '$d': '$digest'"
