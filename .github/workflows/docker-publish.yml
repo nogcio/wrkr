@@ -176,6 +176,20 @@ jobs:
           EXPECTED: ${{ steps.tag.outputs.version }}
         run: |
           set -euo pipefail
+
+          # Ensure the digest is actually present in the registry (not just local build cache).
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if docker buildx imagetools inspect "${IMAGE}@${DIGEST}" >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$attempt" -eq 10 ]; then
+              echo "::error::pushed image digest not found in registry after retries: ${IMAGE}@${DIGEST}"
+              exit 1
+            fi
+            sleep 3
+          done
+
+          docker pull "${IMAGE}@${DIGEST}"
           actual="$(docker run --rm "${IMAGE}@${DIGEST}" --version | awk '{print $2}')"
           if [ "${actual}" != "${EXPECTED}" ]; then
             echo "::error::docker image version mismatch: expected ${EXPECTED}, got ${actual}";
@@ -278,6 +292,13 @@ jobs:
           IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
         run: |
           set -euo pipefail
+
+          echo "Digests downloaded:";
+          ls -la /tmp/digests;
+          echo "Digest contents:";
+          for f in /tmp/digests/*; do
+            echo "- $(basename "$f")=$(cat "$f")";
+          done
 
           refs=""
           for d in /tmp/digests/*; do
