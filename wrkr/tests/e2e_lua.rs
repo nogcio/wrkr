@@ -1,8 +1,10 @@
 use std::path::Path;
-use std::process::Command;
 
 use anyhow::Context as _;
 use wrkr_testserver::TestServer;
+
+#[path = "support/helpers.rs"]
+mod support;
 
 #[tokio::test]
 async fn e2e_lua_runs_for_2s_and_sends_requests() -> anyhow::Result<()> {
@@ -11,21 +13,19 @@ async fn e2e_lua_runs_for_2s_and_sends_requests() -> anyhow::Result<()> {
 
     let script_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/scripts/hello_world.lua");
 
-    let exe = env!("CARGO_BIN_EXE_wrkr");
-
-    let output = tokio::task::spawn_blocking(move || {
-        Command::new(exe)
-            .arg("run")
-            .arg(&script_path)
-            .arg("--duration")
-            .arg("2s")
-            .arg("--output")
-            .arg("json")
-            .env("BASE_URL", &base_url)
-            .output()
-    })
+    let output = support::run_wrkr_output(
+        [
+            "run".to_string(),
+            script_path.to_string_lossy().to_string(),
+            "--duration".to_string(),
+            "2s".to_string(),
+            "--output".to_string(),
+            "json".to_string(),
+        ],
+        [("BASE_URL", base_url.as_str())],
+        std::time::Duration::from_secs(15),
+    )
     .await
-    .context("spawn_blocking join")?
     .context("run wrkr binary")?;
 
     let server_seen = server.stats().requests_total();

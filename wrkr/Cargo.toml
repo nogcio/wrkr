@@ -9,9 +9,17 @@ repository.workspace = true
 
 [dependencies]
 anyhow = "1"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "env"] }
 humantime = "2"
 indicatif = "0.18"
+axum = { version = "0.8", default-features = false, features = [
+    "http1",
+    "tokio",
+    "macros",
+    "json",
+] }
+futures-util = "0.3"
+askama = "0.12"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
@@ -22,8 +30,10 @@ tokio = { version = "1", features = [
     "io-util",
     "process",
 ] }
+tokio-stream = { version = "0.1", features = ["sync"] }
 mimalloc = "0.1.48"
 wrkr-core = { path = "../wrkr-core", default-features = false }
+wrkr-metrics = { path = "../wrkr-metrics" }
 wrkr-lua = { path = "../wrkr-lua", default-features = false, optional = true }
 
 [features]

@@ -146,6 +146,11 @@ impl MetricComputer {
             .where_missing(keys.protocol)
             .merge_histogram_summary_single();
 
+        let iteration_duration = metrics
+            .query(self.iteration_ids.iteration_duration)
+            .where_eq(keys.scenario, scenario_value)
+            .merge_histogram_summary_single();
+
         let snapshot = ScenarioSnapshot {
             requests_total,
             bytes_received_total,
@@ -169,16 +174,19 @@ impl MetricComputer {
         let rps_now = req_delta as f64 / dt;
         rps_stats.push(rps_now);
 
+        let mut latency_count = 0u64;
         let mut latency_mean = 0.0;
         let mut latency_stdev = 0.0;
         let mut latency_max = 0u64;
         let mut latency_p50 = 0u64;
         let mut latency_p75 = 0u64;
         let mut latency_p90 = 0u64;
+        let mut latency_p95 = 0u64;
         let mut latency_p99 = 0u64;
         let mut latency_stdev_pct = 0.0;
 
         if let Some(lat) = latency {
+            latency_count = lat.count;
             latency_mean = lat.mean.unwrap_or(0.0);
             latency_stdev = lat.stdev.unwrap_or(0.0);
             latency_max = lat.max.unwrap_or(0.0) as u64;
@@ -186,11 +194,31 @@ impl MetricComputer {
             latency_p50 = lat.p50.unwrap_or(0.0) as u64;
             latency_p75 = lat.p75.unwrap_or(0.0) as u64;
             latency_p90 = lat.p90.unwrap_or(0.0) as u64;
+            latency_p95 = lat.p95.unwrap_or(0.0) as u64;
             latency_p99 = lat.p99.unwrap_or(0.0) as u64;
 
             if latency_mean > 0.0 {
                 latency_stdev_pct = (latency_stdev / latency_mean) * 100.0;
             }
+        }
+
+        let mut iteration_duration_count = 0u64;
+        let mut iteration_duration_mean = 0.0;
+        let mut iteration_duration_max = 0u64;
+        let mut iteration_duration_p50 = 0u64;
+        let mut iteration_duration_p90 = 0u64;
+        let mut iteration_duration_p95 = 0u64;
+        let mut iteration_duration_p99 = 0u64;
+
+        if let Some(iter_dur) = iteration_duration {
+            iteration_duration_count = iter_dur.count;
+            iteration_duration_mean = iter_dur.mean.unwrap_or(0.0);
+            iteration_duration_max = iter_dur.max.unwrap_or(0.0) as u64;
+
+            iteration_duration_p50 = iter_dur.p50.unwrap_or(0.0) as u64;
+            iteration_duration_p90 = iter_dur.p90.unwrap_or(0.0) as u64;
+            iteration_duration_p95 = iter_dur.p95.unwrap_or(0.0) as u64;
+            iteration_duration_p99 = iter_dur.p99.unwrap_or(0.0) as u64;
         }
 
         let live = LiveMetrics {
@@ -211,14 +239,24 @@ impl MetricComputer {
             req_per_sec_max: rps_stats.max(),
             req_per_sec_stdev_pct: rps_stats.stdev_pct(),
 
+            latency_count,
             latency_mean,
             latency_stdev,
             latency_max,
             latency_p50,
             latency_p75,
             latency_p90,
+            latency_p95,
             latency_p99,
             latency_stdev_pct,
+
+            iteration_duration_count,
+            iteration_duration_mean,
+            iteration_duration_max,
+            iteration_duration_p50,
+            iteration_duration_p90,
+            iteration_duration_p95,
+            iteration_duration_p99,
 
             iterations_total: snapshot.iterations_total,
 

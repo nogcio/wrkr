@@ -189,6 +189,29 @@ Conventions:
 - Keys are `camelCase`.
 - Time and latency values are in seconds (floats).
 
+### Live dashboard + offline HTML report
+
+`wrkr` can optionally serve a local real-time HTML dashboard during execution, and/or export a single self-contained offline `.html` report at the end.
+
+Enable live dashboard (binds loopback-only):
+
+```bash
+wrkr run examples/plaintext.lua --dashboard
+```
+
+Export offline report:
+
+```bash
+wrkr run examples/plaintext.lua --dashboard-out report.html
+```
+
+Environment variables (equivalent):
+
+- `WRKR_DASHBOARD=1`
+- `WRKR_DASHBOARD_OUT=report.html`
+- `WRKR_DASHBOARD_BIND=127.0.0.1`
+- `WRKR_DASHBOARD_PORT=0`
+
 ## Scripting (Lua today)
 
 At the moment, scripts are Lua files that typically:

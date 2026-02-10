@@ -1,4 +1,5 @@
 mod cli;
+mod dashboard;
 mod exit_codes;
 mod export_scenario;
 mod init;

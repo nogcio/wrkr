@@ -34,12 +34,14 @@ pub struct LiveMetrics {
     pub req_per_sec_stdev_pct: f64,
 
     /// Aggregate latency stats (microseconds) across the whole run so far.
+    pub latency_count: u64,
     pub latency_mean: f64,
     pub latency_stdev: f64,
     pub latency_max: u64,
     pub latency_p50: u64,
     pub latency_p75: u64,
     pub latency_p90: u64,
+    pub latency_p95: u64,
     pub latency_p99: u64,
     pub latency_stdev_pct: f64,
 
@@ -51,6 +53,15 @@ pub struct LiveMetrics {
     pub latency_p50_now: Option<f64>,
     pub latency_p95_now: Option<f64>,
     pub iterations_total: u64,
+
+    /// Aggregate iteration duration stats (microseconds) across the whole run so far.
+    pub iteration_duration_count: u64,
+    pub iteration_duration_mean: f64,
+    pub iteration_duration_max: u64,
+    pub iteration_duration_p50: u64,
+    pub iteration_duration_p90: u64,
+    pub iteration_duration_p95: u64,
+    pub iteration_duration_p99: u64,
 }
 
 #[derive(Debug, Default, Clone)]

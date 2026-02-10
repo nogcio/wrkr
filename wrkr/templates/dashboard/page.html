@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }}</title>
+<style>{{ css|safe }}</style>
+</head>
+<body>
+<div class="wrap">
+<header class="top">
+	<div class="title">
+		<h1>wrkr dashboard</h1>
+		<div class="subtitle">overall test metrics</div>
+	</div>
+	<div id="status" class="status">{{ status_text }}</div>
+</header>
+
+<div class="stats">
+	<div class="stat">
+		<div class="stat_label">elapsed</div>
+		<div id="stat_elapsed" class="stat_value mono">—</div>
+		<canvas id="spark_elapsed" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+	<div class="stat">
+		<div class="stat_label">vus</div>
+		<div id="stat_vus" class="stat_value mono">—</div>
+		<div class="stat_hint">max <span id="stat_vus_max" class="mono">—</span></div>
+		<canvas id="spark_vus" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+	<div class="stat">
+		<div class="stat_label">http_reqs/s</div>
+		<div id="stat_rps" class="stat_value mono">—</div>
+		<div class="stat_hint">total <span id="stat_reqs" class="mono">—</span></div>
+		<canvas id="spark_rps" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+	<div class="stat">
+		<div class="stat_label">iterations/s</div>
+		<div id="stat_ips" class="stat_value mono">—</div>
+		<div class="stat_hint">total <span id="stat_iters" class="mono">—</span></div>
+		<canvas id="spark_ips" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+	<div class="stat">
+		<div class="stat_label">http_req_failed</div>
+		<div id="stat_fail_rate" class="stat_value mono">—</div>
+		<div class="stat_hint"><span id="stat_failed" class="mono">—</span> failed</div>
+		<canvas id="spark_fail" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+	<div class="stat">
+		<div class="stat_label">http_req_duration p(95)</div>
+		<div id="stat_http_p95" class="stat_value mono">—</div>
+		<div class="stat_hint">p(99) <span id="stat_http_p99" class="mono">—</span></div>
+		<canvas id="spark_http_p95" class="stat_spark" aria-hidden="true"></canvas>
+	</div>
+</div>
+
+<div class="grid">
+	<section class="card span-2">
+		<h2>HTTP Performance overview</h2>
+		<div class="chart"><canvas id="chart_perf"></canvas></div>
+	</section>
+	<section class="card">
+		<h2>VUs</h2>
+		<div class="chart"><canvas id="chart_vus"></canvas></div>
+	</section>
+	<section class="card">
+		<h2>Transfer Rate</h2>
+		<div class="chart"><canvas id="chart_xfer"></canvas></div>
+	</section>
+	<section class="card">
+		<h2>HTTP Request Duration</h2>
+		<div class="chart"><canvas id="chart_http_dur"></canvas></div>
+	</section>
+	<section class="card">
+		<h2>Iteration Duration</h2>
+		<div class="chart"><canvas id="chart_iter_dur"></canvas></div>
+	</section>
+</div>
+</div>
+
+{% if let Some(snap) = snapshot_json %}
+<script id="snapshot" type="application/json">{{ snap|safe }}</script>
+{% endif %}
+
+<script>{{ chart|safe }}</script>
+<script>window.__WRKR_DASHBOARD_MODE__ = '{{ mode }}';</script>
+<script>{{ js|safe }}</script>
+</body>
+</html>

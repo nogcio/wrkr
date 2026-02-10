@@ -1,4 +1,5 @@
 use clap::{Args, Parser, Subcommand};
+use std::net::IpAddr;
 use std::path::PathBuf;
 use std::time::Duration;
 
@@ -184,6 +185,41 @@ pub struct RunArgs {
     /// Output format
     #[arg(long, value_enum, default_value_t = OutputFormat::HumanReadable)]
     pub output: OutputFormat,
+
+    /// Enable the live HTML dashboard server.
+    #[arg(
+        long,
+        env = "WRKR_DASHBOARD",
+        default_value_t = false,
+        value_parser = clap::builder::BoolishValueParser::new()
+    )]
+    pub dashboard: bool,
+
+    /// Write a single self-contained offline HTML report after the run completes.
+    #[arg(
+        long = "dashboard-out",
+        env = "WRKR_DASHBOARD_OUT",
+        value_name = "FILE"
+    )]
+    pub dashboard_out: Option<PathBuf>,
+
+    /// Dashboard bind address (loopback only). Default: 127.0.0.1
+    #[arg(
+        long = "dashboard-bind",
+        env = "WRKR_DASHBOARD_BIND",
+        value_name = "ADDR",
+        default_value = "127.0.0.1"
+    )]
+    pub dashboard_bind: IpAddr,
+
+    /// Dashboard port. Default: 0 (ephemeral)
+    #[arg(
+        long = "dashboard-port",
+        env = "WRKR_DASHBOARD_PORT",
+        value_name = "PORT",
+        default_value_t = 0
+    )]
+    pub dashboard_port: u16,
 }
 
 #[cfg(test)]
@@ -238,6 +274,14 @@ mod tests {
                 assert_eq!(args.duration, Some(Duration::from_millis(250)));
                 assert_eq!(args.env, vec!["FOO=bar".to_string(), "EMPTY=".to_string()]);
                 assert!(matches!(args.output, OutputFormat::HumanReadable));
+
+                assert!(!args.dashboard);
+                assert!(args.dashboard_out.is_none());
+                assert_eq!(
+                    args.dashboard_bind,
+                    IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
+                );
+                assert_eq!(args.dashboard_port, 0);
             }
             Command::Scenario(_) => panic!("expected run command"),
             Command::Init(_) => panic!("expected run command"),

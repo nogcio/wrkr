@@ -2,12 +2,16 @@ use std::sync::Arc;
 
 use crate::cli::OutputFormat;
 use crate::cli::RunArgs;
+use crate::dashboard::{
+    DashboardCollector, DashboardServer, DashboardServerConfig, write_offline_report,
+};
 use crate::exit_codes::ExitCode;
 use crate::output;
 use crate::run_error::RunError;
 use crate::run_support::{classify_runtime_create_error, classify_runtime_error, merged_env};
 use crate::runtime;
 use crate::scenario_yaml;
+use std::net::SocketAddr;
 
 pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     let out = output::formatter(args.output);
@@ -74,7 +78,46 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         .map_err(|e| classify_runtime_error("script Setup failed", e))?;
 
     out.print_header(args.script.as_path(), &scenarios);
-    let progress = out.progress();
+
+    // Dashboard settings are opt-in (default OFF) and are fully resolved by CLI parsing.
+    let dashboard_enabled = args.dashboard;
+    let dashboard_out = args.dashboard_out.clone();
+    let dashboard_bind = args.dashboard_bind;
+    let dashboard_port = args.dashboard_port;
+
+    let collector =
+        (dashboard_enabled || dashboard_out.is_some()).then(|| DashboardCollector::new(&run_ctx));
+
+    let mut server: Option<DashboardServer> = None;
+    if dashboard_enabled {
+        let bind = SocketAddr::new(dashboard_bind, dashboard_port);
+        let cfg = DashboardServerConfig { bind };
+
+        let Some(c) = collector.clone() else {
+            return Err(RunError::RuntimeError(anyhow::anyhow!(
+                "internal error: dashboard enabled without collector"
+            )));
+        };
+        let s = DashboardServer::start(c, cfg)
+            .await
+            .map_err(|e| RunError::RuntimeError(e.context("failed to start dashboard server")))?;
+
+        eprintln!("dashboard: http://{}", s.addr);
+        server = Some(s);
+    }
+
+    let progress: Option<wrkr_core::ProgressFn> = match (out.progress(), collector.clone()) {
+        (None, None) => None,
+        (Some(p), None) => Some(p),
+        (None, Some(c)) => Some(c.progress_fn()),
+        (Some(p), Some(c)) => {
+            let f: wrkr_core::ProgressFn = Arc::new(move |u| {
+                c.record(&u);
+                (p)(u);
+            });
+            Some(f)
+        }
+    };
 
     let runtime_for_vu = runtime.clone();
     let summary = wrkr_core::run_scenarios(
@@ -94,6 +137,14 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     runtime
         .run_teardown(&run_ctx)
         .map_err(|e| classify_runtime_error("script Teardown failed", e))?;
+
+    if let Some(c) = &collector {
+        c.mark_done();
+    }
+
+    if let Some(s) = server {
+        s.shutdown().await;
+    }
 
     let outputs = runtime
         .run_handle_summary(&run_ctx, &summary)
@@ -122,6 +173,12 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
 
     out.print_summary(&summary)
         .map_err(RunError::RuntimeError)?;
+
+    if let (Some(c), Some(path)) = (collector.as_ref(), dashboard_out.as_ref()) {
+        write_offline_report(c, path).await.map_err(|e| {
+            RunError::RuntimeError(e.context("failed to write dashboard offline report"))
+        })?;
+    }
 
     let checks_failed = summary.scenarios.iter().any(|s| s.checks_failed_total > 0);
     let thresholds_failed = !summary.threshold_violations.is_empty();
