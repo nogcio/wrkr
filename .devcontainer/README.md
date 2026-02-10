@@ -2,7 +2,7 @@
 
 ## `perf` profiling (Linux)
 
-The profiling helper (`wrkr-tools-profile`) uses Linux `perf` inside this devcontainer.
+You can use Linux `perf` inside this devcontainer.
 
 For `perf record` to work reliably in a container, you generally need both:
 

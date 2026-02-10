@@ -8,6 +8,7 @@ members = [
     "wrkr-metrics",
     "wrkr-testserver",
     "wrkr-value",
+    "xtask",
 ]
 
 [workspace.dependencies]

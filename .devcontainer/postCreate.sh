@@ -38,7 +38,7 @@ if ! command -v mdbook >/dev/null 2>&1; then
 fi
 
 if ! command -v k6 >/dev/null 2>&1; then
-  echo "==> Installing k6 (for wrkr-tools-compare-perf)"
+  echo "==> Installing k6 (for perf-gate)"
   arch="$(uname -m)"
   case "$arch" in
     x86_64) k6_arch="amd64" ;;
@@ -54,7 +54,8 @@ if ! command -v k6 >/dev/null 2>&1; then
     k6_ver="${K6_VERSION:-}"
     if [ -z "$k6_ver" ]; then
       k6_ver="$(curl -fsSL https://api.github.com/repos/grafana/k6/releases/latest \
-        | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"].lstrip("v"))' \
+        | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\([^"]*\)".*/\1/p' \
+        | head -n 1 \
         || true)"
     fi
     if [ -z "$k6_ver" ]; then
@@ -69,11 +70,4 @@ if ! command -v k6 >/dev/null 2>&1; then
     install -m 0755 "$tmp_dir/k6-v${k6_ver}-linux-${k6_arch}/k6" "$HOME/.local/bin/k6"
     echo "Installed k6: $($HOME/.local/bin/k6 version | head -n 1)"
   fi
-fi
-
-if command -v uv >/dev/null 2>&1; then
-  echo "==> Python tooling env (uv sync --all-extras)"
-  uv sync --project . --all-extras
-else
-  echo "==> uv not found; skipping Python tooling setup"
 fi

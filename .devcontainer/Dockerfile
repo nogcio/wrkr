@@ -15,9 +15,6 @@ RUN apt-get update \
         libluajit-5.1-dev \
         tar \
         wrk \
-        python3.12 \
-        python3.12-venv \
-        python3-pip \
     && rm -rf /var/lib/apt/lists/*
     
 USER vscode
@@ -28,6 +25,3 @@ ENV PATH=/home/vscode/.cargo/bin:/home/vscode/.local/bin:${PATH}
 RUN curl -sSf https://sh.rustup.rs \
     | sh -s -- -y --profile minimal --default-toolchain 1.92.0 \
     && rustup component add rustfmt clippy
-
-# Python tooling (uv)
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh

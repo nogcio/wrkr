@@ -333,7 +333,7 @@ make run SCRIPT=examples/plaintext.lua BASE_URL=https://example.com WRKR_RUN_ARG
 
 This repo includes a devcontainer under `.devcontainer/`.
 
-On first launch, the container installs system deps (LuaJIT headers + `protoc`), Rust toolchain `1.92.0`, and sets up Python tooling via `uv`.
+On first launch, the container installs system deps (LuaJIT headers + `protoc`) and Rust toolchain `1.92.0`.
 
 Common commands in the devcontainer:
 
@@ -345,7 +345,7 @@ make run SCRIPT=examples/plaintext.lua BASE_URL=http://127.0.0.1:12345
 
 Notes:
 
-- For CPU profiling on Linux via `perf` (used by `make tools-profile-grpc`), see `.devcontainer/README.md` for required Docker run args + host `sysctl`.
+- For CPU profiling on Linux via `perf`, see `.devcontainer/README.md` for required Docker run args + host `sysctl`.
 
 ## Contributing
 
