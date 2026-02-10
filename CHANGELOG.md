@@ -19,6 +19,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 
 
 
+## [0.2.0] - 2026-02-10
+
+### Added
+- Dashboard: live HTML dashboard during runs via `--dashboard`.
+- Dashboard: export a single self-contained offline HTML report via `--dashboard-out <file>`.
+- Prometheus: expose a scrape endpoint (`GET /metrics`) on the dashboard server address when `--dashboard` is enabled.
+- Prometheus: push metrics to a Prometheus Pushgateway during a run via `--prom-pushgateway-url` (plus job/interval/labels).
+
 ## [0.1.2] - 2026-01-30
 
 ### Added
@@ -155,7 +163,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)
 - Example scripts under `examples/` (HTTP, JSON aggregation, gRPC aggregation, lifecycle hooks).
 - Distribution: GitHub Release binaries, Docker image on release tags, and Homebrew formula.
 
-[Unreleased]: https://github.com/nogcio/wrkr/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/nogcio/wrkr/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/nogcio/wrkr/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/nogcio/wrkr/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/nogcio/wrkr/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/nogcio/wrkr/compare/v0.0.9...v0.1.0
