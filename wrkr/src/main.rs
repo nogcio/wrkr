@@ -4,12 +4,14 @@ mod exit_codes;
 mod export_scenario;
 mod init;
 mod output;
+mod prometheus_push;
 mod run;
 mod run_error;
 mod run_support;
 mod runtime;
 mod scenario_yaml;
 mod script_language;
+mod subscribers;
 
 use clap::Parser;
 use mimalloc::MiMalloc;

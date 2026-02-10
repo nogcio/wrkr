@@ -1,6 +1,7 @@
 pub mod agg;
 pub mod key;
 pub mod metrics;
+pub mod prometheus;
 pub mod registry;
 pub mod tags;
 

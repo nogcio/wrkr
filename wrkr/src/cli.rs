@@ -220,6 +220,41 @@ pub struct RunArgs {
         default_value_t = 0
     )]
     pub dashboard_port: u16,
+
+    /// Prometheus Pushgateway base URL (enables pushing during the run), e.g. http://127.0.0.1:9091
+    #[arg(
+        long = "prom-pushgateway-url",
+        env = "WRKR_PROM_PUSHGATEWAY_URL",
+        value_name = "URL"
+    )]
+    pub prom_pushgateway_url: Option<String>,
+
+    /// Pushgateway job name. Default: wrkr
+    #[arg(
+        long = "prom-pushgateway-job",
+        env = "WRKR_PROM_PUSHGATEWAY_JOB",
+        value_name = "JOB",
+        default_value = "wrkr"
+    )]
+    pub prom_pushgateway_job: String,
+
+    /// How often to push metrics to Pushgateway during the run. Default: 1s
+    #[arg(
+        long = "prom-pushgateway-interval",
+        env = "WRKR_PROM_PUSHGATEWAY_INTERVAL",
+        value_parser = parse_duration,
+        value_name = "DURATION",
+        default_value = "1s"
+    )]
+    pub prom_pushgateway_interval: Duration,
+
+    /// Pushgateway grouping label (repeatable, KEY=VALUE). Example: --prom-pushgateway-label instance=ci
+    #[arg(
+        long = "prom-pushgateway-label",
+        env = "WRKR_PROM_PUSHGATEWAY_LABEL",
+        value_name = "KEY=VALUE"
+    )]
+    pub prom_pushgateway_label: Vec<String>,
 }
 
 #[cfg(test)]

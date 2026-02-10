@@ -92,6 +92,10 @@ impl DashboardCollector {
         }
     }
 
+    pub(crate) fn prometheus_text(&self) -> String {
+        wrkr_metrics::prometheus::registry_to_text(self.source.metrics.as_ref())
+    }
+
     pub(crate) fn subscribe(&self) -> broadcast::Receiver<DashboardEvent> {
         self.tx.subscribe()
     }

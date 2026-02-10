@@ -22,7 +22,7 @@ pub use iteration_metrics::{IterationMetricIds, IterationSample};
 pub use metrics_context::MetricsContext;
 pub use outputs::write_output_files;
 pub use pacer::ArrivalPacer;
-pub use progress::{ProgressFn, ProgressUpdate, ScenarioProgress, StageProgress};
+pub use progress::{LiveMetrics, ProgressFn, ProgressUpdate, ScenarioProgress, StageProgress};
 pub use request_metrics::{Protocol, RequestMetricIds, RequestSample};
 pub use run::*;
 pub use schedule::{RampingU64Schedule, StageSnapshot};

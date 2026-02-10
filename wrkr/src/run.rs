@@ -7,10 +7,12 @@ use crate::dashboard::{
 };
 use crate::exit_codes::ExitCode;
 use crate::output;
+use crate::prometheus_push;
 use crate::run_error::RunError;
 use crate::run_support::{classify_runtime_create_error, classify_runtime_error, merged_env};
 use crate::runtime;
 use crate::scenario_yaml;
+use crate::subscribers::{Subscriber, Subscribers};
 use std::net::SocketAddr;
 
 pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
@@ -88,6 +90,28 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     let collector =
         (dashboard_enabled || dashboard_out.is_some()).then(|| DashboardCollector::new(&run_ctx));
 
+    let prom_pusher = if let Some(url) = args.prom_pushgateway_url.as_deref() {
+        let mut cfg = wrkr_metrics::prometheus::pushgateway::PushgatewayConfig::new(
+            url.to_string(),
+            args.prom_pushgateway_job.clone(),
+        );
+        cfg.grouping_labels = prometheus_push::parse_grouping_labels(&args.prom_pushgateway_label)
+            .map_err(|e| RunError::InvalidInput(anyhow::anyhow!(e)))?;
+        // Ensure concurrent runs don't overwrite each other by default.
+        cfg.grouping_labels
+            .push(("run".to_string(), prometheus_push::default_run_id()));
+
+        Some(prometheus_push::PrometheusPusher::new(
+            run_ctx.metrics.clone(),
+            prometheus_push::PrometheusPushConfig {
+                pushgateway: cfg,
+                interval: args.prom_pushgateway_interval,
+            },
+        ))
+    } else {
+        None
+    };
+
     let mut server: Option<DashboardServer> = None;
     if dashboard_enabled {
         let bind = SocketAddr::new(dashboard_bind, dashboard_port);
@@ -106,18 +130,28 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         server = Some(s);
     }
 
-    let progress: Option<wrkr_core::ProgressFn> = match (out.progress(), collector.clone()) {
-        (None, None) => None,
-        (Some(p), None) => Some(p),
-        (None, Some(c)) => Some(c.progress_fn()),
-        (Some(p), Some(c)) => {
-            let f: wrkr_core::ProgressFn = Arc::new(move |u| {
-                c.record(&u);
-                (p)(u);
-            });
-            Some(f)
+    let mut subs = Subscribers::new();
+    subs.push(Subscriber::progress_opt(out.progress()));
+    if let Some(c) = collector.clone() {
+        let c2 = c.clone();
+        subs.push(Subscriber::both(
+            c.progress_fn(),
+            async move { c2.mark_done() },
+        ));
+    }
+    if let Some(p) = prom_pusher.clone() {
+        let p2 = p.clone();
+        subs.push(Subscriber::both(p.progress_fn(), async move {
+            p2.push_final().await
+        }));
+    }
+    subs.push(Subscriber::finalizer(async move {
+        if let Some(s) = server {
+            s.shutdown().await;
         }
-    };
+    }));
+
+    let progress: Option<wrkr_core::ProgressFn> = subs.build_progress_fn();
 
     let runtime_for_vu = runtime.clone();
     let summary = wrkr_core::run_scenarios(
@@ -138,13 +172,7 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
         .run_teardown(&run_ctx)
         .map_err(|e| classify_runtime_error("script Teardown failed", e))?;
 
-    if let Some(c) = &collector {
-        c.mark_done();
-    }
-
-    if let Some(s) = server {
-        s.shutdown().await;
-    }
+    subs.finalize_all().await;
 
     let outputs = runtime
         .run_handle_summary(&run_ctx, &summary)

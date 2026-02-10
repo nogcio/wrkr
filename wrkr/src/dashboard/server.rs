@@ -45,6 +45,7 @@ impl DashboardServer {
         let app = Router::new()
             .route("/", get(index))
             .route("/events", get(events))
+            .route("/metrics", get(metrics))
             .with_state(state);
 
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -68,6 +69,18 @@ impl DashboardServer {
         }
         let _ = self.handle.await;
     }
+}
+
+async fn metrics(State(st): State<AppState>) -> impl IntoResponse {
+    let text = st.collector.prometheus_text();
+    (
+        [(
+            axum::http::header::CONTENT_TYPE,
+            HeaderValue::from_static("text/plain; version=0.0.4; charset=utf-8"),
+        )],
+        text,
+    )
+        .into_response()
 }
 
 async fn index() -> impl IntoResponse {

@@ -212,6 +212,67 @@ Environment variables (equivalent):
 - `WRKR_DASHBOARD_BIND=127.0.0.1`
 - `WRKR_DASHBOARD_PORT=0`
 
+### Prometheus metrics (scrape)
+
+When running with `--dashboard`, `wrkr` also exposes a Prometheus scrape endpoint on the same address:
+
+- `GET /metrics`
+
+Example:
+
+1. Run: `wrkr run examples/plaintext.lua --dashboard`
+2. Note the printed URL (e.g. `dashboard: http://127.0.0.1:12345`)
+3. Scrape: `curl http://127.0.0.1:12345/metrics`
+
+Notes:
+
+- The endpoint exports the full internal metric registry (all series + tags).
+- All exported metric names are prefixed with `wrkr_`.
+- Structured metric kinds are exported in a Prometheus-native shape:
+	- `MetricKind::Rate` is exported as `<name>_total` (counter), `<name>_hits_total` (counter), and `<name>_rate` (gauge, optional).
+	- `MetricKind::Histogram` is exported as a Prometheus `histogram` named `<name>` using `<name>_bucket{le="..."}`, `<name>_sum`, and `<name>_count`.
+
+### Prometheus metrics (push via Pushgateway)
+
+If you need to push metrics during a run (e.g. short-lived CI jobs), `wrkr` can send the full internal metric registry to a Prometheus Pushgateway.
+
+Example:
+
+```bash
+wrkr run examples/plaintext.lua \
+	--prom-pushgateway-url http://127.0.0.1:9091 \
+	--prom-pushgateway-job wrkr \
+	--prom-pushgateway-interval 1s \
+	--prom-pushgateway-label instance=ci
+```
+
+Notes:
+
+- Push happens periodically during the run (based on `--prom-pushgateway-interval`) and once at the end (best-effort).
+- By default, `wrkr` adds a grouping label `run=<id>` to avoid concurrent runs overwriting each other.
+- Push uses the same Prometheus text exposition as `/metrics`.
+
+### Prometheus Pushgateway (push)
+
+If you need push-based delivery (e.g. short-lived CI jobs), `wrkr` can push metrics to a Prometheus Pushgateway while the test is running.
+
+Example:
+
+- `wrkr run examples/plaintext.lua --prom-pushgateway-url http://127.0.0.1:9091`
+
+Optional flags:
+
+- `--prom-pushgateway-job wrkr`
+- `--prom-pushgateway-interval 1s`
+- `--prom-pushgateway-label instance=ci` (repeatable)
+
+Environment variables (equivalent):
+
+- `WRKR_PROM_PUSHGATEWAY_URL=http://127.0.0.1:9091`
+- `WRKR_PROM_PUSHGATEWAY_JOB=wrkr`
+- `WRKR_PROM_PUSHGATEWAY_INTERVAL=1s`
+- `WRKR_PROM_PUSHGATEWAY_LABEL=instance=ci` (single value)
+
 ## Scripting (Lua today)
 
 At the moment, scripts are Lua files that typically:
