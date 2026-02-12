@@ -54,7 +54,10 @@ function Default()
 
   local decoded = nil
   if type(res) == "table" and type(res.body) == "string" then
-    decoded = json.decode(res.body)
+    local ok, v = pcall(json.decode, res.body)
+    if ok then
+      decoded = v
+    end
   end
 
   local ctx = { res = res, decoded = decoded, expected = data }

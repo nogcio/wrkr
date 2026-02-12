@@ -5,10 +5,67 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Args as ClapArgs;
+use clap::ValueEnum;
 
 mod parse;
 mod server;
 mod tools;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+pub enum PerfGateProfile {
+    /// Auto-select: laptop on macOS, ci otherwise.
+    Auto,
+    /// CI / server-style defaults (strict + higher load).
+    Ci,
+    /// Laptop-friendly defaults (lower load, less flakiness).
+    Laptop,
+}
+
+impl PerfGateProfile {
+    fn resolve(self) -> Self {
+        match self {
+            Self::Auto => {
+                if cfg!(target_os = "macos") {
+                    Self::Laptop
+                } else {
+                    Self::Ci
+                }
+            }
+            other => other,
+        }
+    }
+
+    fn apply_defaults(self, args: &mut Args) {
+        match self {
+            Self::Auto | Self::Ci => {}
+            Self::Laptop => {
+                // Laptop profile is intended for local dev on less beefy machines.
+                args.wrkr_vus = 32;
+                args.k6_vus = None;
+                args.wrk_threads = 4;
+                args.wrk_connections = 32;
+
+                // Reduce variance a bit without making runs too slow.
+                args.samples = 2;
+            }
+        }
+    }
+}
+
+fn fmt_rps_samples(label: &str, samples: &[f64]) {
+    if samples.is_empty() {
+        println!("{label}: rps=-");
+        return;
+    }
+
+    let med = median(samples);
+    let list = samples
+        .iter()
+        .map(|x| format!("{x:.3}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    println!("{label}: rps={med:.3} (samples: {list})");
+}
 
 #[derive(Debug, ClapArgs)]
 pub struct Args {
@@ -87,6 +144,26 @@ pub struct Args {
     /// If set, missing k6 is a hard error; otherwise k6 comparisons are skipped
     #[arg(long, default_value_t = false)]
     pub require_k6: bool,
+
+    /// Perf gate profile (auto=laptop on macOS, ci otherwise)
+    #[arg(long, env = "PERF_GATE_PROFILE", value_enum, default_value_t = PerfGateProfile::Auto)]
+    pub profile: PerfGateProfile,
+
+    /// Number of samples per tool per case; median is used
+    #[arg(long, env = "SAMPLES", default_value_t = 1)]
+    pub samples: u32,
+
+    /// If true, fail the gate on wrk-reported correctness errors (socket/non-2xx)
+    #[arg(long, env = "WRK_STRICT", default_value_t = true)]
+    pub wrk_strict: bool,
+
+    /// If true, compare wrkr against wrk (perf gates + cross-protocol gate)
+    #[arg(long, env = "COMPARE_WRK", default_value_t = true)]
+    pub compare_wrk: bool,
+
+    /// Max acceptable failed request rate reported by k6 (e.g. 0.001 = 0.1%)
+    #[arg(long, env = "K6_MAX_REQ_FAILED_RATE", default_value_t = 0.0)]
+    pub k6_max_req_failed_rate: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +185,11 @@ struct CaseGrpc {
 }
 
 pub fn run(args: Args) -> Result<()> {
+    let mut args = args;
+
+    let profile = args.profile.resolve();
+    profile.apply_defaults(&mut args);
+
     let root = tools::resolve_repo_root(args.root)?;
 
     validate_positive_ratio("ratio_ok_get_hello", args.ratio_ok_get_hello)?;
@@ -132,6 +214,17 @@ pub fn run(args: Args) -> Result<()> {
 
     let duration_seconds = parse::parse_duration_seconds(&args.duration)
         .with_context(|| format!("invalid --duration {:?}", args.duration))?;
+
+    if args.samples == 0 {
+        bail!("--samples must be >= 1");
+    }
+
+    if args.k6_max_req_failed_rate < 0.0 {
+        bail!(
+            "--k6-max-req-failed-rate must be >= 0, got {}",
+            args.k6_max_req_failed_rate
+        );
+    }
 
     if args.wrkr_vus == 0 {
         bail!("--wrkr-vus must be >= 1");
@@ -200,14 +293,20 @@ pub fn run(args: Args) -> Result<()> {
     ];
 
     println!("==> perf-gate");
+    println!("profile={profile:?}");
     println!("root={}", root.display());
     println!("duration={} ({}s)", args.duration, duration_seconds);
     println!(
         "wrkr_vus={} k6_vus={} wrk_threads={} wrk_connections={}",
         args.wrkr_vus, k6_vus, args.wrk_threads, args.wrk_connections
     );
+    println!(
+        "samples={} compare_wrk={} wrk_strict={} k6_max_req_failed_rate={}",
+        args.samples, args.compare_wrk, args.wrk_strict, args.k6_max_req_failed_rate
+    );
 
     let mut failures: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
     let mut summaries: Vec<String> = Vec::new();
 
     let mut hello_wrk_rps: Option<f64> = None;
@@ -227,71 +326,118 @@ pub fn run(args: Args) -> Result<()> {
 
         // wrk
         let mut wrk_rps: Option<f64> = None;
-        if let Some(wrk_bin) = tool_paths.wrk.as_ref() {
-            let output = run_wrk(
-                &root,
-                wrk_bin,
-                case.wrk_script,
-                &args.duration,
-                args.wrk_threads,
-                args.wrk_connections,
-                &targets.http_url,
-            )?;
-            let parsed = parse::parse_wrk(&output.stdout)?;
-            if !parsed.errors.is_empty() {
-                for e in parsed.errors {
-                    failures.push(format!("HTTP {}: wrk correctness: {e}", case.title));
+        let mut wrk_had_errors = false;
+        if !args.compare_wrk {
+            println!("wrk: SKIP (compare_wrk=false)");
+        } else if let Some(wrk_bin) = tool_paths.wrk.as_ref() {
+            println!("wrk (x{})", args.samples);
+            let mut rps_samples: Vec<f64> = Vec::new();
+            let mut errors_seen: Vec<String> = Vec::new();
+
+            for _ in 0..args.samples {
+                let output = run_wrk(
+                    &root,
+                    wrk_bin,
+                    case.wrk_script,
+                    &args.duration,
+                    args.wrk_threads,
+                    args.wrk_connections,
+                    &targets.http_url,
+                )?;
+                let parsed = parse::parse_wrk(&output.stdout)?;
+                rps_samples.push(parsed.rps);
+                if !parsed.errors.is_empty() {
+                    wrk_had_errors = true;
+                    errors_seen.extend(parsed.errors);
                 }
             }
-            wrk_rps = Some(parsed.rps);
+
+            wrk_rps = Some(median(&rps_samples));
+            fmt_rps_samples("wrk", &rps_samples);
+
+            if wrk_had_errors {
+                errors_seen.sort();
+                errors_seen.dedup();
+                for e in errors_seen {
+                    let msg = format!("HTTP {}: wrk correctness: {e}", case.title);
+                    if args.wrk_strict {
+                        failures.push(msg);
+                    } else {
+                        warnings.push(msg);
+                    }
+                }
+            }
         } else {
             println!("wrk: SKIP (not installed)");
         }
 
-        if idx == 0 {
+        if args.compare_wrk && idx == 0 && (!wrk_had_errors || args.wrk_strict) {
             hello_wrk_rps = wrk_rps;
         }
 
         // wrkr
-        let wrkr_output = run_wrkr(
-            &root,
-            &tool_paths.wrkr,
-            case.wrkr_script,
-            &args.duration,
-            args.wrkr_vus,
-            &targets.http_url,
-            false,
-        )?;
-        let wrkr_rps = parse::parse_wrkr_rps(
-            &wrkr_output.stdout,
-            &wrkr_output.stderr,
-            Some(duration_seconds),
-        )?;
+        println!("wrkr (x{})", args.samples);
+        let mut wrkr_rps_samples: Vec<f64> = Vec::new();
+        let mut wrkr_status_nonzero: Option<i32> = None;
+        for _ in 0..args.samples {
+            let wrkr_output = run_wrkr(
+                &root,
+                &tool_paths.wrkr,
+                case.wrkr_script,
+                &args.duration,
+                args.wrkr_vus,
+                &targets.http_url,
+            )?;
+            if wrkr_output.status != 0 {
+                wrkr_status_nonzero = Some(wrkr_output.status);
+            }
+            wrkr_rps_samples.push(parse::parse_wrkr_rps(
+                &wrkr_output.stdout,
+                &wrkr_output.stderr,
+                Some(duration_seconds),
+            )?);
+        }
+        let wrkr_rps = median(&wrkr_rps_samples);
+        fmt_rps_samples("wrkr", &wrkr_rps_samples);
 
         // k6
         let mut k6_rps: Option<f64> = None;
         let mut k6_failed_rate: Option<f64> = None;
         let mut k6_warn_failed: u32 = 0;
         if let Some(k6_bin) = tool_paths.k6.as_ref() {
-            let k6_output = run_k6_http(
-                &root,
-                k6_bin,
-                case.k6_script,
-                &args.duration,
-                k6_vus,
-                &targets.http_url,
-            )?;
-            k6_rps = Some(parse::parse_k6_http_rps(
-                &k6_output.stdout,
-                &k6_output.stderr,
-            )?);
-            k6_failed_rate = parse::parse_k6_req_failed_rate(
-                "http_req_failed",
-                &k6_output.stdout,
-                &k6_output.stderr,
-            );
-            k6_warn_failed =
-                parse::count_k6_request_failed_warnings(&k6_output.stdout, &k6_output.stderr);
+            println!("k6 (x{})", args.samples);
+            let mut rps_samples: Vec<f64> = Vec::new();
+            let mut worst_failed_rate: Option<f64> = None;
+            let mut warn_total: u32 = 0;
+
+            for _ in 0..args.samples {
+                let k6_output = run_k6_http(
+                    &root,
+                    k6_bin,
+                    case.k6_script,
+                    &args.duration,
+                    k6_vus,
+                    &targets.http_url,
+                )?;
+                rps_samples.push(parse::parse_k6_http_rps(
+                    &k6_output.stdout,
+                    &k6_output.stderr,
+                )?);
+                if let Some(rate) = parse::parse_k6_req_failed_rate(
+                    "http_req_failed",
+                    &k6_output.stdout,
+                    &k6_output.stderr,
+                ) {
+                    worst_failed_rate = Some(worst_failed_rate.unwrap_or(0.0).max(rate));
+                }
+                warn_total +=
+                    parse::count_k6_request_failed_warnings(&k6_output.stdout, &k6_output.stderr);
+            }
+
+            k6_rps = Some(median(&rps_samples));
+            k6_failed_rate = worst_failed_rate;
+            k6_warn_failed = warn_total;
+            fmt_rps_samples("k6", &rps_samples);
         } else {
             println!("k6: SKIP (not installed)");
         }
@@ -305,38 +451,50 @@ pub fn run(args: Args) -> Result<()> {
         ));
 
         // correctness gates
-        if wrkr_output.status != 0 {
-            failures.push(format!(
-                "HTTP {}: wrkr exited with {}",
-                case.title, wrkr_output.status
-            ));
+        if let Some(status) = wrkr_status_nonzero {
+            failures.push(format!("HTTP {}: wrkr exited with {}", case.title, status));
         }
 
-        if let Some(rate) = k6_failed_rate
-            && rate > 0.0
-        {
-            failures.push(format!(
-                "HTTP {}: k6 http_req_failed={:.4}",
-                case.title, rate
-            ));
+        if let Some(rate) = k6_failed_rate {
+            if rate > args.k6_max_req_failed_rate {
+                failures.push(format!(
+                    "HTTP {}: k6 http_req_failed={:.4}",
+                    case.title, rate
+                ));
+            } else if rate > 0.0 {
+                warnings.push(format!(
+                    "HTTP {}: k6 http_req_failed={:.4} (allowed <= {})",
+                    case.title, rate, args.k6_max_req_failed_rate
+                ));
+            }
         }
         if k6_warn_failed > 0 {
-            failures.push(format!(
+            let msg = format!(
                 "HTTP {}: k6 request failed warnings={}",
                 case.title, k6_warn_failed
-            ));
+            );
+            if args.k6_max_req_failed_rate > 0.0 {
+                warnings.push(msg);
+            } else {
+                failures.push(msg);
+            }
         }
 
         // perf gates
-        if let Some(wrk_rps) = wrk_rps
-            && wrkr_rps + f64::EPSILON < (wrk_rps * case.ratio_ok_wrkr_over_wrk)
-        {
-            failures.push(format!(
-                "HTTP {}: wrkr too slow vs wrk (ratio_ok={}, ratio_actual={:.3})",
-                case.title,
-                case.ratio_ok_wrkr_over_wrk,
-                wrkr_rps / wrk_rps
-            ));
+        if args.compare_wrk {
+            // If wrk is already reporting correctness issues and we're not strict,
+            // treat its RPS as informative-only and skip perf comparisons.
+            if let Some(wrk_rps) = wrk_rps
+                && (!wrk_had_errors || args.wrk_strict)
+                && wrkr_rps + f64::EPSILON < (wrk_rps * case.ratio_ok_wrkr_over_wrk)
+            {
+                failures.push(format!(
+                    "HTTP {}: wrkr too slow vs wrk (ratio_ok={}, ratio_actual={:.3})",
+                    case.title,
+                    case.ratio_ok_wrkr_over_wrk,
+                    wrkr_rps / wrk_rps
+                ));
+            }
         }
 
         if let Some(k6_rps) = k6_rps
@@ -357,20 +515,29 @@ pub fn run(args: Args) -> Result<()> {
         ensure_exists(&root, case.wrkr_script)?;
         ensure_exists(&root, case.k6_script)?;
 
-        let wrkr_output = run_wrkr(
-            &root,
-            &tool_paths.wrkr,
-            case.wrkr_script,
-            &args.duration,
-            args.wrkr_vus,
-            &targets.grpc_url,
-            true,
-        )?;
-        let wrkr_rps = parse::parse_wrkr_rps(
-            &wrkr_output.stdout,
-            &wrkr_output.stderr,
-            Some(duration_seconds),
-        )?;
+        println!("wrkr (x{})", args.samples);
+        let mut wrkr_rps_samples: Vec<f64> = Vec::new();
+        let mut wrkr_status_nonzero: Option<i32> = None;
+        for _ in 0..args.samples {
+            let wrkr_output = run_wrkr(
+                &root,
+                &tool_paths.wrkr,
+                case.wrkr_script,
+                &args.duration,
+                args.wrkr_vus,
+                &targets.grpc_url,
+            )?;
+            if wrkr_output.status != 0 {
+                wrkr_status_nonzero = Some(wrkr_output.status);
+            }
+            wrkr_rps_samples.push(parse::parse_wrkr_rps(
+                &wrkr_output.stdout,
+                &wrkr_output.stderr,
+                Some(duration_seconds),
+            )?);
+        }
+        let wrkr_rps = median(&wrkr_rps_samples);
+        fmt_rps_samples("wrkr", &wrkr_rps_samples);
 
         if idx == 0 {
             first_grpc_wrkr_rps = Some(wrkr_rps);
@@ -380,32 +547,49 @@ pub fn run(args: Args) -> Result<()> {
         let mut k6_failed_rate: Option<f64> = None;
         let mut k6_warn_failed: u32 = 0;
         if let Some(k6_bin) = tool_paths.k6.as_ref() {
-            let k6_output = run_k6_grpc(
-                &root,
-                k6_bin,
-                case.k6_script,
-                &args.duration,
-                k6_vus,
-                &targets.grpc_url,
-            )?;
-            k6_rps = Some(parse::parse_k6_grpc_rps(
-                &k6_output.stdout,
-                &k6_output.stderr,
-            )?);
-            k6_failed_rate = parse::parse_k6_req_failed_rate(
-                "grpc_req_failed",
-                &k6_output.stdout,
-                &k6_output.stderr,
-            )
-            .or_else(|| {
-                parse::parse_k6_req_failed_rate(
-                    "http_req_failed",
+            println!("k6 (x{})", args.samples);
+            let mut rps_samples: Vec<f64> = Vec::new();
+            let mut worst_failed_rate: Option<f64> = None;
+            let mut warn_total: u32 = 0;
+
+            for _ in 0..args.samples {
+                let k6_output = run_k6_grpc(
+                    &root,
+                    k6_bin,
+                    case.k6_script,
+                    &args.duration,
+                    k6_vus,
+                    &targets.grpc_url,
+                )?;
+                rps_samples.push(parse::parse_k6_grpc_rps(
+                    &k6_output.stdout,
+                    &k6_output.stderr,
+                )?);
+
+                let rate = parse::parse_k6_req_failed_rate(
+                    "grpc_req_failed",
                     &k6_output.stdout,
                     &k6_output.stderr,
                 )
-            });
-            k6_warn_failed =
-                parse::count_k6_request_failed_warnings(&k6_output.stdout, &k6_output.stderr);
+                .or_else(|| {
+                    parse::parse_k6_req_failed_rate(
+                        "http_req_failed",
+                        &k6_output.stdout,
+                        &k6_output.stderr,
+                    )
+                });
+                if let Some(rate) = rate {
+                    worst_failed_rate = Some(worst_failed_rate.unwrap_or(0.0).max(rate));
+                }
+
+                warn_total +=
+                    parse::count_k6_request_failed_warnings(&k6_output.stdout, &k6_output.stderr);
+            }
+
+            k6_rps = Some(median(&rps_samples));
+            k6_failed_rate = worst_failed_rate;
+            k6_warn_failed = warn_total;
+            fmt_rps_samples("k6", &rps_samples);
         } else {
             println!("k6: SKIP (not installed)");
         }
@@ -417,22 +601,30 @@ pub fn run(args: Args) -> Result<()> {
             opt_fmt(k6_rps)
         ));
 
-        if wrkr_output.status != 0 {
-            failures.push(format!(
-                "gRPC {}: wrkr exited with {}",
-                case.title, wrkr_output.status
-            ));
+        if let Some(status) = wrkr_status_nonzero {
+            failures.push(format!("gRPC {}: wrkr exited with {}", case.title, status));
         }
-        if let Some(rate) = k6_failed_rate
-            && rate > 0.0
-        {
-            failures.push(format!("gRPC {}: k6 req_failed={:.4}", case.title, rate));
+
+        if let Some(rate) = k6_failed_rate {
+            if rate > args.k6_max_req_failed_rate {
+                failures.push(format!("gRPC {}: k6 req_failed={:.4}", case.title, rate));
+            } else if rate > 0.0 {
+                warnings.push(format!(
+                    "gRPC {}: k6 req_failed={:.4} (allowed <= {})",
+                    case.title, rate, args.k6_max_req_failed_rate
+                ));
+            }
         }
         if k6_warn_failed > 0 {
-            failures.push(format!(
-                "gRPC {}: k6 request failed warnings={}",
+            let msg = format!(
+                "gRPC {}: k6 request failed warnings={} ",
                 case.title, k6_warn_failed
-            ));
+            );
+            if args.k6_max_req_failed_rate > 0.0 {
+                warnings.push(msg);
+            } else {
+                failures.push(msg);
+            }
         }
 
         if let Some(k6_rps) = k6_rps
@@ -448,16 +640,20 @@ pub fn run(args: Args) -> Result<()> {
     }
 
     // Cross-protocol gate: wrkr gRPC vs wrk hello
-    if let (Some(grpc_wrkr), Some(wrk_hello)) = (first_grpc_wrkr_rps, hello_wrk_rps) {
-        if grpc_wrkr + f64::EPSILON < (wrk_hello * args.ratio_ok_grpc_wrkr_over_wrk_hello) {
-            failures.push(format!(
-                "cross-protocol: wrkr grpc too slow vs wrk hello (ratio_ok={}, ratio_actual={:.3})",
-                args.ratio_ok_grpc_wrkr_over_wrk_hello,
-                grpc_wrkr / wrk_hello
-            ));
+    if args.compare_wrk {
+        if let (Some(grpc_wrkr), Some(wrk_hello)) = (first_grpc_wrkr_rps, hello_wrk_rps) {
+            if grpc_wrkr + f64::EPSILON < (wrk_hello * args.ratio_ok_grpc_wrkr_over_wrk_hello) {
+                failures.push(format!(
+                    "cross-protocol: wrkr grpc too slow vs wrk hello (ratio_ok={}, ratio_actual={:.3})",
+                    args.ratio_ok_grpc_wrkr_over_wrk_hello,
+                    grpc_wrkr / wrk_hello
+                ));
+            }
+        } else {
+            println!("cross-protocol gate: SKIP (missing wrk or gRPC metric)");
         }
     } else {
-        println!("cross-protocol gate: SKIP (missing wrk or gRPC metric)");
+        println!("cross-protocol gate: SKIP (compare_wrk=false)");
     }
 
     // Ensure server is shut down.
@@ -466,6 +662,13 @@ pub fn run(args: Args) -> Result<()> {
     println!("\n==> SUMMARY");
     for s in &summaries {
         println!("- {s}");
+    }
+
+    if !warnings.is_empty() {
+        println!("\nWARNINGS ({}):", warnings.len());
+        for w in &warnings {
+            println!("- {w}");
+        }
     }
 
     if failures.is_empty() {
@@ -550,7 +753,6 @@ fn run_wrk(
     conns: u32,
     base_url: &str,
 ) -> Result<Captured> {
-    println!("wrk");
     let mut cmd = Command::new(wrk_bin);
     cmd.arg(format!("-t{threads}"))
         .arg(format!("-c{conns}"))
@@ -572,10 +774,7 @@ fn run_wrkr(
     duration: &str,
     vus: u32,
     base_url: &str,
-    is_grpc: bool,
 ) -> Result<Captured> {
-    println!("wrkr");
-
     let mut env = no_proxy_env();
     env.insert("BASE_URL".to_string(), base_url.to_string());
 
@@ -594,13 +793,6 @@ fn run_wrkr(
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    // A tiny hint in logs so it is clear which target is used.
-    if is_grpc {
-        println!("target(grpc)={base_url}");
-    } else {
-        println!("target(http)={base_url}");
-    }
-
     capture_with_env(cmd, &env)
 }
 
@@ -612,8 +804,6 @@ fn run_k6_http(
     vus: u32,
     base_url: &str,
 ) -> Result<Captured> {
-    println!("k6");
-
     let mut env = no_proxy_env();
     env.insert("BASE_URL".to_string(), base_url.to_string());
 
@@ -639,8 +829,6 @@ fn run_k6_grpc(
     vus: u32,
     grpc_url: &str,
 ) -> Result<Captured> {
-    println!("k6");
-
     let mut env = no_proxy_env();
     env.insert("BASE_URL".to_string(), grpc_url.to_string());
 
@@ -729,4 +917,11 @@ fn opt_fmt(v: Option<f64>) -> String {
         None => "-".to_string(),
         Some(x) => format!("{x:.3}"),
     }
+}
+
+fn median(values: &[f64]) -> f64 {
+    debug_assert!(!values.is_empty());
+    let mut v = values.to_vec();
+    v.sort_by(|a, b| a.total_cmp(b));
+    v[v.len() / 2]
 }
