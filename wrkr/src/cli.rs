@@ -70,12 +70,22 @@ pub enum OutputFormat {
     author,
     version,
     about = "Fast, scriptable load testing tool",
-    long_about = "wrkr is a fast, scriptable load testing tool.\n\nA test script defines an `options` table (iterations/vus/duration/scenarios) and an entry function to execute per virtual user.\n\nThe current script runtime is Lua and built-in APIs are available via `require(\"wrkr/...\")`.\n\nUse `--scenario NAME` to select a single scenario from `Options.scenarios`, or `--scenario PATH.yml` to load one or more scenarios from YAML (skipping `Options` parsing).\n\nBy default, environment variables from the current process are visible to the script; use `--env KEY=VALUE` to add/override values.",
-    after_help = "Examples:\n  wrkr run examples/plaintext.lua\n  wrkr run examples/plaintext.lua --vus 50 --duration 30s\n  wrkr run examples/json_aggregate.lua --iterations 1000 --output json\n  wrkr run examples/plaintext.lua --env BASE_URL=https://example.com\n\nDocs & examples: https://github.com/nogcio/wrkr"
+    long_about = "wrkr is a fast, scriptable load testing tool.\n\nModes:\n- URL mode: `wrkr [options] <url>`\n- Scripting mode: `wrkr run <script.lua>`\n\nBy default, environment variables from the current process are visible to scripts; use `--env KEY=VALUE` to add/override values.",
+    after_help = "Examples:\n  # URL mode (no script):\n  wrkr -c 50 -d 10s https://example.com/plaintext\n\n  # scripting:\n  wrkr run examples/plaintext.lua\n  wrkr run examples/plaintext.lua --vus 50 --duration 30s\n  wrkr run examples/json_aggregate.lua --iterations 1000 --output json\n  wrkr run examples/plaintext.lua --env BASE_URL=https://example.com\n\nDocs & examples: https://github.com/nogcio/wrkr",
+    arg_required_else_help = true
 )]
 pub struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    pub command: Option<Command>,
+
+    #[command(flatten)]
+    pub cfg: RunConfigArgs,
+
+    #[command(flatten)]
+    pub out: RunOutputArgs,
+
+    #[command(flatten)]
+    pub wrk: WrkModeArgs,
 }
 
 #[derive(Debug, Subcommand)]
@@ -109,23 +119,6 @@ pub enum ScenarioCommand {
 pub struct ExportScenarioArgs {
     /// Path to the script (.lua)
     pub script: PathBuf,
-
-    /// Override iterations (otherwise use `Options.iterations` or default=1)
-    #[arg(long)]
-    pub iterations: Option<u64>,
-
-    /// Number of virtual users
-    #[arg(long)]
-    pub vus: Option<u64>,
-
-    /// Test duration (e.g. 10s, 250ms, 1m)
-    #[arg(long, value_parser = parse_duration)]
-    pub duration: Option<Duration>,
-
-    /// Add/override env vars visible to the script (repeatable, KEY=VALUE).
-    /// CLI-provided vars override the current process env.
-    #[arg(long = "env", value_name = "KEY=VALUE")]
-    pub env: Vec<String>,
 
     /// Output YAML file path
     #[arg(long, value_name = "FILE", default_value = "scenario.yaml")]
@@ -164,26 +157,32 @@ pub struct RunArgs {
     /// more scenarios to run. When a YAML file is provided, the script's `Options` table is not parsed.
     #[arg(long, value_name = "NAME|PATH.yml")]
     pub scenario: Option<String>,
+}
 
+#[derive(Debug, Args, Clone)]
+pub struct RunConfigArgs {
     /// Override iterations (otherwise use `Options.iterations` or default=1)
-    #[arg(long)]
+    #[arg(long, global = true)]
     pub iterations: Option<u64>,
 
     /// Number of virtual users
-    #[arg(long)]
+    #[arg(long, short = 'c', global = true)]
     pub vus: Option<u64>,
 
     /// Test duration (e.g. 10s, 250ms, 1m)
-    #[arg(long, value_parser = parse_duration)]
+    #[arg(long, short = 'd', value_parser = parse_duration, global = true)]
     pub duration: Option<Duration>,
 
     /// Add/override env vars visible to the script (repeatable, KEY=VALUE).
     /// CLI-provided vars override the current process env.
-    #[arg(long = "env", value_name = "KEY=VALUE")]
+    #[arg(long = "env", value_name = "KEY=VALUE", global = true)]
     pub env: Vec<String>,
+}
 
+#[derive(Debug, Args, Clone)]
+pub struct RunOutputArgs {
     /// Output format
-    #[arg(long, value_enum, default_value_t = OutputFormat::HumanReadable)]
+    #[arg(long, value_enum, default_value_t = OutputFormat::HumanReadable, global = true)]
     pub output: OutputFormat,
 
     /// Enable the live HTML dashboard server.
@@ -191,7 +190,8 @@ pub struct RunArgs {
         long,
         env = "WRKR_DASHBOARD",
         default_value_t = false,
-        value_parser = clap::builder::BoolishValueParser::new()
+        value_parser = clap::builder::BoolishValueParser::new(),
+        global = true
     )]
     pub dashboard: bool,
 
@@ -199,7 +199,8 @@ pub struct RunArgs {
     #[arg(
         long = "dashboard-out",
         env = "WRKR_DASHBOARD_OUT",
-        value_name = "FILE"
+        value_name = "FILE",
+        global = true
     )]
     pub dashboard_out: Option<PathBuf>,
 
@@ -208,7 +209,8 @@ pub struct RunArgs {
         long = "dashboard-bind",
         env = "WRKR_DASHBOARD_BIND",
         value_name = "ADDR",
-        default_value = "127.0.0.1"
+        default_value = "127.0.0.1",
+        global = true
     )]
     pub dashboard_bind: IpAddr,
 
@@ -217,7 +219,8 @@ pub struct RunArgs {
         long = "dashboard-port",
         env = "WRKR_DASHBOARD_PORT",
         value_name = "PORT",
-        default_value_t = 0
+        default_value_t = 0,
+        global = true
     )]
     pub dashboard_port: u16,
 
@@ -225,7 +228,8 @@ pub struct RunArgs {
     #[arg(
         long = "prom-pushgateway-url",
         env = "WRKR_PROM_PUSHGATEWAY_URL",
-        value_name = "URL"
+        value_name = "URL",
+        global = true
     )]
     pub prom_pushgateway_url: Option<String>,
 
@@ -234,7 +238,8 @@ pub struct RunArgs {
         long = "prom-pushgateway-job",
         env = "WRKR_PROM_PUSHGATEWAY_JOB",
         value_name = "JOB",
-        default_value = "wrkr"
+        default_value = "wrkr",
+        global = true
     )]
     pub prom_pushgateway_job: String,
 
@@ -244,7 +249,8 @@ pub struct RunArgs {
         env = "WRKR_PROM_PUSHGATEWAY_INTERVAL",
         value_parser = parse_duration,
         value_name = "DURATION",
-        default_value = "1s"
+        default_value = "1s",
+        global = true
     )]
     pub prom_pushgateway_interval: Duration,
 
@@ -252,9 +258,45 @@ pub struct RunArgs {
     #[arg(
         long = "prom-pushgateway-label",
         env = "WRKR_PROM_PUSHGATEWAY_LABEL",
-        value_name = "KEY=VALUE"
+        value_name = "KEY=VALUE",
+        global = true
     )]
     pub prom_pushgateway_label: Vec<String>,
+}
+
+#[derive(Debug, Args, Clone, Default)]
+pub struct WrkModeArgs {
+    /// Target URL (URL mode)
+    #[arg(value_name = "URL")]
+    pub url: Option<String>,
+
+    /// Concurrency hint (used as a fallback for VUs if -c/--vus is not provided)
+    #[arg(short = 't', long = "threads")]
+    pub threads: Option<u64>,
+
+    /// Script file (`-s`). Interpreted as a `wrkr` script.
+    #[arg(short = 's', long = "script", value_name = "FILE")]
+    pub script: Option<PathBuf>,
+
+    /// Request header (repeatable). Accepts KEY:VALUE or KEY=VALUE.
+    #[arg(short = 'H', long = "header", value_name = "KEY:VALUE")]
+    pub header: Vec<String>,
+
+    /// HTTP method (default: GET)
+    #[arg(long, short = 'm', default_value = "GET")]
+    pub method: String,
+
+    /// Request body (sent as-is)
+    #[arg(long, value_name = "BODY")]
+    pub body: Option<String>,
+
+    /// Per-request timeout (duration string, e.g. 250ms, 10s)
+    #[arg(long, short = 'T', value_name = "DURATION")]
+    pub timeout: Option<String>,
+
+    /// Request name tag (recorded as request metric tag `name`)
+    #[arg(long, value_name = "NAME")]
+    pub name: Option<String>,
 }
 
 #[cfg(test)]
@@ -302,24 +344,28 @@ mod tests {
         };
 
         match cli.command {
-            Command::Run(args) => {
+            Some(Command::Run(args)) => {
                 assert_eq!(args.script, PathBuf::from("bench.lua"));
-                assert_eq!(args.iterations, Some(10));
-                assert_eq!(args.vus, Some(2));
-                assert_eq!(args.duration, Some(Duration::from_millis(250)));
-                assert_eq!(args.env, vec!["FOO=bar".to_string(), "EMPTY=".to_string()]);
-                assert!(matches!(args.output, OutputFormat::HumanReadable));
-
-                assert!(!args.dashboard);
-                assert!(args.dashboard_out.is_none());
+                assert_eq!(cli.cfg.iterations, Some(10));
+                assert_eq!(cli.cfg.vus, Some(2));
+                assert_eq!(cli.cfg.duration, Some(Duration::from_millis(250)));
                 assert_eq!(
-                    args.dashboard_bind,
+                    cli.cfg.env,
+                    vec!["FOO=bar".to_string(), "EMPTY=".to_string()]
+                );
+                assert!(matches!(cli.out.output, OutputFormat::HumanReadable));
+
+                assert!(!cli.out.dashboard);
+                assert!(cli.out.dashboard_out.is_none());
+                assert_eq!(
+                    cli.out.dashboard_bind,
                     IpAddr::V4(std::net::Ipv4Addr::new(127, 0, 0, 1))
                 );
-                assert_eq!(args.dashboard_port, 0);
+                assert_eq!(cli.out.dashboard_port, 0);
             }
-            Command::Scenario(_) => panic!("expected run command"),
-            Command::Init(_) => panic!("expected run command"),
+            Some(Command::Scenario(_)) => panic!("expected run command"),
+            Some(Command::Init(_)) => panic!("expected run command"),
+            None => panic!("expected run command"),
         }
     }
 
@@ -332,15 +378,16 @@ mod tests {
         };
 
         match cli.command {
-            Command::Init(args) => {
+            Some(Command::Init(args)) => {
                 assert_eq!(args.dir, PathBuf::from("."));
                 assert!(!args.force);
                 assert!(!args.vscode);
                 assert_eq!(args.lang, ScriptLanguage::Lua);
                 assert_eq!(args.script, None);
             }
-            Command::Scenario(_) => panic!("expected init command"),
-            Command::Run(_) => panic!("expected init command"),
+            Some(Command::Scenario(_)) => panic!("expected init command"),
+            Some(Command::Run(_)) => panic!("expected init command"),
+            None => panic!("expected init command"),
         }
     }
 }

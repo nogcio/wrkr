@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
-use crate::cli::OutputFormat;
-use crate::cli::RunArgs;
+use crate::cli::{OutputFormat, RunArgs, RunConfigArgs, RunOutputArgs};
 use crate::dashboard::{
     DashboardCollector, DashboardServer, DashboardServerConfig, write_offline_report,
 };
@@ -15,14 +14,18 @@ use crate::scenario_yaml;
 use crate::subscribers::{Subscriber, Subscribers};
 use std::net::SocketAddr;
 
-pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
-    let out = output::formatter(args.output);
+pub async fn run(
+    args: RunArgs,
+    cfg_args: RunConfigArgs,
+    out_args: RunOutputArgs,
+) -> Result<ExitCode, RunError> {
+    let out = output::formatter(out_args.output);
 
-    let env = merged_env(&args.env).map_err(RunError::InvalidInput)?;
+    let env = merged_env(&cfg_args.env).map_err(RunError::InvalidInput)?;
     let cfg = wrkr_core::RunConfig {
-        iterations: args.iterations,
-        vus: args.vus,
-        duration: args.duration,
+        iterations: cfg_args.iterations,
+        vus: cfg_args.vus,
+        duration: cfg_args.duration,
     };
 
     let runtime = runtime::create_runtime(&args.script).map_err(classify_runtime_create_error)?;
@@ -82,21 +85,22 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
     out.print_header(args.script.as_path(), &scenarios);
 
     // Dashboard settings are opt-in (default OFF) and are fully resolved by CLI parsing.
-    let dashboard_enabled = args.dashboard;
-    let dashboard_out = args.dashboard_out.clone();
-    let dashboard_bind = args.dashboard_bind;
-    let dashboard_port = args.dashboard_port;
+    let dashboard_enabled = out_args.dashboard;
+    let dashboard_out = out_args.dashboard_out.clone();
+    let dashboard_bind = out_args.dashboard_bind;
+    let dashboard_port = out_args.dashboard_port;
 
     let collector =
         (dashboard_enabled || dashboard_out.is_some()).then(|| DashboardCollector::new(&run_ctx));
 
-    let prom_pusher = if let Some(url) = args.prom_pushgateway_url.as_deref() {
+    let prom_pusher = if let Some(url) = out_args.prom_pushgateway_url.as_deref() {
         let mut cfg = wrkr_metrics::prometheus::pushgateway::PushgatewayConfig::new(
             url.to_string(),
-            args.prom_pushgateway_job.clone(),
+            out_args.prom_pushgateway_job.clone(),
         );
-        cfg.grouping_labels = prometheus_push::parse_grouping_labels(&args.prom_pushgateway_label)
-            .map_err(|e| RunError::InvalidInput(anyhow::anyhow!(e)))?;
+        cfg.grouping_labels =
+            prometheus_push::parse_grouping_labels(&out_args.prom_pushgateway_label)
+                .map_err(|e| RunError::InvalidInput(anyhow::anyhow!(e)))?;
         // Ensure concurrent runs don't overwrite each other by default.
         cfg.grouping_labels
             .push(("run".to_string(), prometheus_push::default_run_id()));
@@ -105,7 +109,7 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
             run_ctx.metrics.clone(),
             prometheus_push::PrometheusPushConfig {
                 pushgateway: cfg,
-                interval: args.prom_pushgateway_interval,
+                interval: out_args.prom_pushgateway_interval,
             },
         ))
     } else {
@@ -189,7 +193,7 @@ pub async fn run(args: RunArgs) -> Result<ExitCode, RunError> {
             )
         })?;
 
-        if matches!(args.output, OutputFormat::HumanReadable) {
+        if matches!(out_args.output, OutputFormat::HumanReadable) {
             if let Some(s) = outputs.stdout {
                 print!("{s}");
             }
