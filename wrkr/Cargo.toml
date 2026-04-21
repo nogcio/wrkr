@@ -19,7 +19,7 @@ axum = { version = "0.8", default-features = false, features = [
     "json",
 ] }
 futures-util = "0.3"
-askama = "0.12"
+askama = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_yaml = "0.9"
 serde_json = "1"
@@ -31,7 +31,7 @@ tokio = { version = "1", features = [
     "process",
 ] }
 tokio-stream = { version = "0.1", features = ["sync"] }
-mimalloc = "0.1.48"
+mimalloc = "0.1.49"
 wrkr-core = { path = "../wrkr-core", default-features = false }
 wrkr-metrics = { path = "../wrkr-metrics" }
 wrkr-lua = { path = "../wrkr-lua", default-features = false, optional = true }
